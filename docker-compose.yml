@@ -43,5 +43,3 @@ volumes:
 networks:
   rlnet:
     driver: bridge
-
-# Note: Removed legacy 'version' top-level key to align with modern Compose specification
