@@ -1,4 +1,4 @@
-# Makefile - developer convenience targets for rocket-launch-dashboard
+# Makefile - developer convenience targets for earth-to-orbit-monitoring
 
 COMPOSE_FILE=docker-compose.yml
 

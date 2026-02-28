@@ -1,8 +1,8 @@
-Rocket Launch Dashboard — Rebuild plan (skeleton)
+Earth to Orbit Monitoring Dashboard — Rebuild plan (skeleton)
 
 Overview
 --------
-This branch contains a minimal skeleton for Rocket Launch Dashboard v2 (Postgres + FastAPI + React + docker-compose). The goal is to provide a reproducible developer workflow, CI skeleton, and clear migration path from the existing repo.
+This branch contains a minimal skeleton for Earth to Orbit Monitoring Dashboard v2 (Postgres + FastAPI + React + docker-compose). The goal is to provide a reproducible developer workflow, CI skeleton, and clear migration path from the existing repo.
 
 Directories added
 - services/api    -> FastAPI backend (placeholder endpoints)

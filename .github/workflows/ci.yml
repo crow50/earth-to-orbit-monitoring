@@ -42,10 +42,10 @@ jobs:
         with:
           context: ./services/api
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rocket-launch-dashboard-api:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository_owner }}/earth-to-orbit-monitoring-api:${{ github.sha }}
       - name: Build and push frontend image
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rocket-launch-dashboard-frontend:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository_owner }}/earth-to-orbit-monitoring-frontend:${{ github.sha }}

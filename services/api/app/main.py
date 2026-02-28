@@ -12,7 +12,7 @@ class Launch(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-app = FastAPI(title="Rocket Launch Dashboard API", version="0.1.0")
+app = FastAPI(title="Earth to Orbit Monitoring Dashboard API", version="0.1.0")
 
 # Simple in-memory sample data (replace with DB-backed implementation)
 SAMPLE_LAUNCHES = [

@@ -11,7 +11,7 @@ export default function App() {
   }, []);
   return (
     <div style={{ padding: "1rem", fontFamily: "sans-serif" }}>
-      <h1>Rocket Launch Dashboard (MVP)</h1>
+      <h1>Earth to Orbit Monitoring Dashboard (MVP)</h1>
       <p>List of launches (sample)</p>
       <ul>
         {launches.map((l) => (
