@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db:
     image: postgres:15
@@ -45,3 +43,5 @@ volumes:
 networks:
   rlnet:
     driver: bridge
+
+# Note: Removed legacy 'version' top-level key to align with modern Compose specification
