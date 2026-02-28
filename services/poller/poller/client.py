@@ -13,7 +13,7 @@ class LaunchLibraryError(Exception):
 
 
 def fetch_launches() -> List[Dict[str, Any]]:
-    url = f"{settings.launch_library_base_url}/launch/"
+    url = f"{settings.launch_library_base_url}/launches/"
     params = {"limit": 100, "mode": "detailed"}
     launches: List[Dict[str, Any]] = []
 
