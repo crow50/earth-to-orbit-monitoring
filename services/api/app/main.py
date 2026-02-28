@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -13,6 +14,11 @@ class Launch(BaseModel):
     longitude: Optional[float] = None
 
 app = FastAPI(title="Earth to Orbit Monitoring Dashboard API", version="0.1.0")
+
+@app.get("/")
+def read_root():
+    """Redirect root to API documentation."""
+    return RedirectResponse(url="/docs")
 
 # Simple in-memory sample data (replace with DB-backed implementation)
 SAMPLE_LAUNCHES = [
