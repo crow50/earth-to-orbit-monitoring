@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: rl
+      POSTGRES_PASSWORD: rlpass
+      POSTGRES_DB: rocket_launch
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - rlnet
+
+  api:
+    build: ./services/api
+    environment:
+      DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - rlnet
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - rlnet
+
+  ingest:
+    build: ./services/ingest
+    depends_on:
+      - db
+    networks:
+      - rlnet
+
+volumes:
+  db-data:
+
+networks:
+  rlnet:
+    driver: bridge
