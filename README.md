@@ -1,6 +1,9 @@
-# Rocket Launch Alerts Dashboard
+# Earth to Orbit Monitoring Dashboard
 
 Real-time updates and notifications for scheduled rocket launches.
+
+## 🗺️ Project Roadmap
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the latest project status and feature analysis.
 
 ## Services
 
