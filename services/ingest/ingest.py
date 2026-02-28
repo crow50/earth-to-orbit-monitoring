@@ -16,7 +16,7 @@ def fetch_launches_page(url):
 
 
 def main():
-    launches_url = f"{LL_API}/launch/"
+    launches_url = f"{LL_API}/launches/"
     print("Ingest placeholder: fetching sample page from LL dev endpoint ->", launches_url)
     try:
         data = fetch_launches_page(launches_url)
