@@ -32,6 +32,8 @@ services:
 
   ingest:
     build: ./services/ingest
+    environment:
+      DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
     depends_on:
       - db
     networks:
