@@ -22,10 +22,22 @@ build:
 	docker compose -f $(COMPOSE_FILE) build
 
 test:
-	@echo "No tests yet - run individual service tests"
+	@echo "Running tests for all services..."
+	@if [ -d services/poller ]; then \
+		make -C services/poller test; \
+	else \
+		echo "ERROR: services/poller not found"; \
+		exit 1; \
+	fi
 
 migrate:
-	@echo "Migration helpers will be added here (alembic)"
+	@echo "Running database migrations..."
+	@if [ -d services/poller ]; then \
+		make -C services/poller migrate; \
+	else \
+		echo "ERROR: services/poller not found"; \
+		exit 1; \
+	fi
 
 import:
 	@echo "Run ingest worker (one-shot)"
