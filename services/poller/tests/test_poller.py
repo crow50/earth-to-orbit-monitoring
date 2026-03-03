@@ -23,13 +23,13 @@ def test_fetch_launches_pagination(monkeypatch):
     monkeypatch.setattr(client.settings, "launch_library_base_url", "https://example.com")
     responses.add(
         responses.GET,
-        "https://example.com/launch/",
-        json={"results": [{"id": "1"}], "next": "https://example.com/launch/?page=2"},
+        "https://example.com/launches/?limit=100&mode=detailed",
+        json={"results": [{"id": "1"}], "next": "https://example.com/launches/?page=2"},
         status=200,
     )
     responses.add(
         responses.GET,
-        "https://example.com/launch/?page=2",
+        "https://example.com/launches/?page=2",
         json={"results": [{"id": "2"}], "next": None},
         status=200,
     )
