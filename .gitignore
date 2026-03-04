@@ -9,3 +9,5 @@ dist/
 build/
 venv/
 *.egg-info/
+node_modules/
+frontend/package-lock.json
