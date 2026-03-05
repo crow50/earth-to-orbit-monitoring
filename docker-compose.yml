@@ -33,6 +33,7 @@ services:
   ingest:
     build: ./services/ingest
     environment:
+      POLL_INTERVAL_SECONDS: 3600
       DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
     depends_on:
       - db
