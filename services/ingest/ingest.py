@@ -7,6 +7,7 @@ import time
 
 LL_API = os.environ.get("LL_API_URL", "https://lldev.thespacedevs.com/2.3.0/launches/")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rocket_launch")
+POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 
 def init_db(conn):
     with conn.cursor() as cur:
@@ -60,7 +61,7 @@ def upsert_launches(conn, launches):
     conn.commit()
 
 def main():
-    print("Starting ingest service...")
+    print(f"Starting ingest service with {POLL_INTERVAL_SECONDS}s interval...")
     
     # Wait for DB
     conn = None
@@ -78,20 +79,27 @@ def main():
 
     init_db(conn)
 
-    url = LL_API
-    pages_to_fetch = 2
-    for _ in range(pages_to_fetch):
-        if not url:
-            break
-        data = fetch_launches(url)
-        results = data.get("results", [])
-        print(f"Upserting {len(results)} launches...")
-        upsert_launches(conn, results)
-        url = data.get("next")
-        # Small delay to be nice to the dev API
-        time.sleep(1)
+    while True:
+        print(f"--- Poll cycle started at {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+        try:
+            url = LL_API
+            pages_to_fetch = 2
+            for _ in range(pages_to_fetch):
+                if not url:
+                    break
+                data = fetch_launches(url)
+                results = data.get("results", [])
+                print(f"Upserting {len(results)} launches...")
+                upsert_launches(conn, results)
+                url = data.get("next")
+                # Small delay to be nice to the dev API
+                time.sleep(1)
+            print(f"--- Poll cycle complete. Sleeping for {POLL_INTERVAL_SECONDS}s ---")
+        except Exception as e:
+            print(f"Error during poll cycle: {e}")
+            
+        time.sleep(POLL_INTERVAL_SECONDS)
 
-    print("Ingest complete.")
     conn.close()
 
 if __name__ == '__main__':
