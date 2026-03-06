@@ -364,9 +364,15 @@ export default function App() {
           </div>
         ))}
 
-        {launches.length === 0 && (
+        {!loading && launches.length === 0 && (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
             No results. Try widening filters.
+          </div>
+        )}
+
+        {loading && launches.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
+            Loading…
           </div>
         )}
       </div>
