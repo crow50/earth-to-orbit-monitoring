@@ -8,12 +8,31 @@
 | `name` | string | Mission name |
 | `net` | timestamp | Launch date/time (NET) |
 | `status` | string | Launch status name |
-| `pad` | string | Launch pad name |
-| `location_id` | integer | Launch location ID |
+| `pad` | string | Launch pad name (denormalized, backward compat) |
+| `pad_id` | integer | Launch Library 2 pad ID (normalized join to `pads`) |
+| `location_id` | integer | Launch Library 2 location ID (join to `locations`) |
 | `last_updated` | timestamp | Last update time from Launch Library 2 |
 | `notified_24h` | boolean | Porch alert sent at T-24h |
 | `notified_1h` | boolean | Porch alert sent at T-1h |
 | `notified_15m` | boolean | Porch alert sent at T-15m |
+
+## locations
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | integer | Launch Library 2 location ID (primary key) |
+| `name` | string | Spaceport / location name |
+| `country_code` | string | Country code (if provided by LL2) |
+
+## pads
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | integer | Launch Library 2 pad ID (primary key) |
+| `name` | string | Pad name |
+| `location_id` | integer | FK → `locations.id` |
+| `latitude` | float | Pad latitude |
+| `longitude` | float | Pad longitude |
 
 
 ## Ingest pattern (recommended)
