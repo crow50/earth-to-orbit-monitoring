@@ -6,7 +6,7 @@ import os
 class Settings:
     def __init__(self) -> None:
         self.launch_library_base_url = os.getenv(
-            "LAUNCH_LIBRARY_BASE_URL", "https://ll.thespacedevs.com/2.3.0"
+            "LAUNCH_LIBRARY_BASE_URL", "https://lldev.thespacedevs.com/2.3.0"
         )
         self.launch_library_dev_fallback = os.getenv(
             "LAUNCH_LIBRARY_DEV_FALLBACK", "false"

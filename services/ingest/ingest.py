@@ -6,7 +6,7 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_values
 
-LL_API = os.environ.get("LL_API_URL", "https://ll.thespacedevs.com/2.3.0/launches/")
+LL_API = os.environ.get("LL_API_URL", "https://lldev.thespacedevs.com/2.3.0/launches/")
 LL_API_MODE = os.environ.get("LL_API_MODE", "detailed")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rocket_launch")
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
