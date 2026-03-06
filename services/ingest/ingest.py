@@ -39,7 +39,7 @@ def init_db(conn):
             """
             CREATE TABLE IF NOT EXISTS launches (
                 id TEXT PRIMARY KEY,
-                name TEXT,
+                name TEXT NOT NULL,
                 net TIMESTAMPTZ,
                 status TEXT,
                 pad TEXT,
@@ -70,6 +70,17 @@ def fetch_launches(url):
     return r.json()
 
 
+def _safe_float(val):
+    if val is None:
+        return None
+    try:
+        if isinstance(val, str) and not val.strip():
+            return None
+        return float(val)
+    except Exception:
+        return None
+
+
 def upsert_locations_and_pads(conn, launches):
     locations = {}
     pads = {}
@@ -80,20 +91,24 @@ def upsert_locations_and_pads(conn, launches):
 
         loc_id = loc.get("id")
         if loc_id is not None:
-            locations[int(loc_id)] = (
-                int(loc_id),
-                loc.get("name"),
+            loc_id = int(loc_id)
+            loc_name = loc.get("name") or f"Location {loc_id}"
+            locations[loc_id] = (
+                loc_id,
+                loc_name,
                 loc.get("country_code"),
             )
 
         pad_id = pad.get("id")
         if pad_id is not None:
-            pads[int(pad_id)] = (
-                int(pad_id),
-                pad.get("name"),
-                int(loc_id) if loc_id is not None else None,
-                float(pad["latitude"]) if pad.get("latitude") is not None else None,
-                float(pad["longitude"]) if pad.get("longitude") is not None else None,
+            pad_id = int(pad_id)
+            pad_name = pad.get("name") or f"Pad {pad_id}"
+            pads[pad_id] = (
+                pad_id,
+                pad_name,
+                loc_id if loc_id is not None else None,
+                _safe_float(pad.get("latitude")),
+                _safe_float(pad.get("longitude")),
             )
 
     with conn.cursor() as cur:

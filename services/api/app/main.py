@@ -92,6 +92,16 @@ def _cache_get(key: Tuple) -> Optional[list[dict]]:
 def _cache_set(key: Tuple, data: list[dict]) -> None:
     if _CACHE_TTL_SECONDS <= 0:
         return
+
+    # Guard against unbounded growth (high-cardinality filter combinations).
+    # Simple max-size + oldest-eviction (good enough for a single-process API).
+    max_entries = int(os.environ.get("API_CACHE_MAX_ENTRIES", "512"))
+    if max_entries > 0 and len(_cache) >= max_entries:
+        # Drop oldest entries by timestamp.
+        oldest = sorted(_cache.items(), key=lambda kv: kv[1][0])[: max_entries // 8 or 1]
+        for k, _ in oldest:
+            _cache.pop(k, None)
+
     _cache[key] = (time.time(), data)
 
 
@@ -147,7 +157,6 @@ def filters_meta():
                     """
                     SELECT id, name, location_id, latitude, longitude
                     FROM pads
-                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
                     ORDER BY name
                     """
                 )
@@ -191,9 +200,9 @@ def _build_launches_query(
     if q:
         like = f"%{q}%"
         clauses.append(
-            "(l.name ILIKE %s OR p.name ILIKE %s OR loc.name ILIKE %s)"
+            "(l.name ILIKE %s OR p.name ILIKE %s OR loc.name ILIKE %s OR l.pad ILIKE %s)"
         )
-        params.extend([like, like, like])
+        params.extend([like, like, like, like])
 
     if status:
         clauses.append("l.status = ANY(%s)")
@@ -274,24 +283,31 @@ def list_launches(
 ):
     """List launches with server-side filtering + pagination."""
 
+    # Cache only the low-cardinality "default" query shapes.
+    # High-cardinality combinations (especially q + multi-select filters) can
+    # explode the keyspace and are not worth caching in-process.
+    cacheable = (
+        not q
+        and not status
+        and not location_id
+        and not pad_id
+        and not from_time
+        and not to_time
+    )
+
     cache_key = (
         offset,
         limit,
         sort,
-        q,
-        tuple(status or []),
-        tuple(location_id or []),
-        tuple(pad_id or []),
-        from_time.isoformat() if from_time else None,
-        to_time.isoformat() if to_time else None,
         upcoming,
     )
 
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = f"public, max-age={_CACHE_TTL_SECONDS}"
-        response.headers["X-Cache"] = "HIT"
-        return cached
+    if cacheable:
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            response.headers["Cache-Control"] = f"public, max-age={_CACHE_TTL_SECONDS}"
+            response.headers["X-Cache"] = "HIT"
+            return cached
 
     try:
         sql, params = _build_launches_query(
@@ -313,10 +329,11 @@ def list_launches(
             rows = cur.fetchall()
         conn.close()
 
-        _cache_set(cache_key, rows)
+        if cacheable:
+            _cache_set(cache_key, rows)
 
         response.headers["Cache-Control"] = f"public, max-age={_CACHE_TTL_SECONDS}"
-        response.headers["X-Cache"] = "MISS"
+        response.headers["X-Cache"] = "MISS" if cacheable else "BYPASS"
         return rows
     except Exception as e:
         print(f"Error fetching launches: {e}")
