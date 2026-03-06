@@ -6,8 +6,11 @@ import os
 class Settings:
     def __init__(self) -> None:
         self.launch_library_base_url = os.getenv(
-            "LAUNCH_LIBRARY_BASE_URL", "https://ll.thespacedevs.com/2.2.0"
+            "LAUNCH_LIBRARY_BASE_URL", "https://ll.thespacedevs.com/2.3.0"
         )
+        self.launch_library_dev_fallback = os.getenv(
+            "LAUNCH_LIBRARY_DEV_FALLBACK", "false"
+        ).lower() in {"1", "true", "yes", "y"}
         self.poll_interval_seconds = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
         database_url = os.getenv("DATABASE_URL")
         if not database_url:

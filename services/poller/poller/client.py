@@ -32,7 +32,7 @@ def fetch_launches() -> List[Dict[str, Any]]:
                 raise LaunchLibraryError(str(exc)) from exc
 
             if response.status_code == 429:
-                if "ll.thespacedevs.com" in url:
+                if settings.launch_library_dev_fallback and "ll.thespacedevs.com" in url:
                     url = url.replace("ll.thespacedevs.com", "lldev.thespacedevs.com")
                     attempts = 0
                     continue

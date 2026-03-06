@@ -35,6 +35,9 @@ services:
     environment:
       POLL_INTERVAL_SECONDS: 3600
       DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
+      # Configurable LL2 endpoint/mode (avoid hardcoding dev endpoints in code)
+      LL_API_URL: ${LL_API_URL:-https://ll.thespacedevs.com/2.3.0/launches/}
+      LL_API_MODE: ${LL_API_MODE:-detailed}
     depends_on:
       - db
     networks:

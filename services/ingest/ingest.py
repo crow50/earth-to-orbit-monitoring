@@ -6,7 +6,8 @@ import psycopg2
 import requests
 from psycopg2.extras import execute_values
 
-LL_API = os.environ.get("LL_API_URL", "https://lldev.thespacedevs.com/2.3.0/launches/")
+LL_API = os.environ.get("LL_API_URL", "https://ll.thespacedevs.com/2.3.0/launches/")
+LL_API_MODE = os.environ.get("LL_API_MODE", "detailed")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rocket_launch")
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 
@@ -63,9 +64,9 @@ def init_db(conn):
     conn.commit()
 
 
-def fetch_launches(url):
+def fetch_launches(url, *, params=None):
     print(f"Fetching from {url}...")
-    r = requests.get(url, timeout=30)
+    r = requests.get(url, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -206,10 +207,14 @@ def main():
         try:
             url = LL_API
             pages_to_fetch = 2
+
+            # First request sets the desired mode; subsequent pages follow `next`.
+            params = {"mode": LL_API_MODE} if LL_API_MODE else None
+
             for _ in range(pages_to_fetch):
                 if not url:
                     break
-                data = fetch_launches(url)
+                data = fetch_launches(url, params=params)
                 results = data.get("results", [])
                 print(f"Upserting {len(results)} launches...")
 
@@ -218,7 +223,8 @@ def main():
                 upsert_launches(conn, results)
 
                 url = data.get("next")
-                # Small delay to be nice to the dev API
+                params = None
+                # Small delay to be nice to the API
                 time.sleep(1)
             print(f"--- Poll cycle complete. Sleeping for {POLL_INTERVAL_SECONDS}s ---")
         except Exception as e:
