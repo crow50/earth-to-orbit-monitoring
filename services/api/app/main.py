@@ -15,21 +15,56 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rock
 
 # Simple in-process cache (good enough for single-container deployments).
 _CACHE_TTL_SECONDS = int(os.environ.get("API_CACHE_TTL_SECONDS", "60"))
-_cache: dict[Tuple[int, int], tuple[float, list[dict]]] = {}
+_cache: dict[Tuple, tuple[float, list[dict]]] = {}
 
 
 class Launch(BaseModel):
     id: str
+
+    # Launch fields
     mission_name: Optional[str] = None
-    rocket_name: Optional[str] = None
     launch_time: Optional[datetime] = None
-    location_name: Optional[str] = None
     status: Optional[str] = None
+    last_updated: Optional[datetime] = None
+
+    # Normalized geo fields
+    location_id: Optional[int] = None
+    location_name: Optional[str] = None
+    location_country_code: Optional[str] = None
+
+    pad_id: Optional[int] = None
+    pad_name: Optional[str] = None
+    pad_latitude: Optional[float] = None
+    pad_longitude: Optional[float] = None
+
+    # Backward-compat
+    # (previously overloaded `location_name` with pad string)
+    legacy_pad: Optional[str] = None
+
+
+class LocationMeta(BaseModel):
+    id: int
+    name: str
+    country_code: Optional[str] = None
+
+
+class PadMeta(BaseModel):
+    id: int
+    name: str
+    location_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class FiltersMeta(BaseModel):
+    statuses: list[str]
+    locations: list[LocationMeta]
+    pads: list[PadMeta]
 
 
 app = FastAPI(
     title="Earth to Orbit Monitoring Dashboard API",
-    version="0.2.0",
+    version="0.3.0",
     # Serve docs under the /api prefix, since the reverse-proxy routes /api/* here.
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
@@ -41,7 +76,7 @@ def get_db_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 
-def _cache_get(key: Tuple[int, int]) -> Optional[list[dict]]:
+def _cache_get(key: Tuple) -> Optional[list[dict]]:
     if _CACHE_TTL_SECONDS <= 0:
         return None
     hit = _cache.get(key)
@@ -54,7 +89,7 @@ def _cache_get(key: Tuple[int, int]) -> Optional[list[dict]]:
     return data
 
 
-def _cache_set(key: Tuple[int, int], data: list[dict]) -> None:
+def _cache_set(key: Tuple, data: list[dict]) -> None:
     if _CACHE_TTL_SECONDS <= 0:
         return
     _cache[key] = (time.time(), data)
@@ -87,14 +122,170 @@ def health():
         raise HTTPException(status_code=503, detail="unhealthy")
 
 
+@app.get("/api/v1/meta/filters", response_model=FiltersMeta)
+def filters_meta():
+    """Return distinct values for building unauthenticated filter UI."""
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT status FROM launches WHERE status IS NOT NULL ORDER BY status"
+            )
+            statuses = [r["status"] for r in cur.fetchall()]
+
+            # If locations/pads tables don't exist yet, these will throw; treat as empty.
+            try:
+                cur.execute(
+                    "SELECT id, name, country_code FROM locations ORDER BY name"
+                )
+                locations = cur.fetchall()
+            except Exception:
+                locations = []
+
+            try:
+                cur.execute(
+                    """
+                    SELECT id, name, location_id, latitude, longitude
+                    FROM pads
+                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+                    ORDER BY name
+                    """
+                )
+                pads = cur.fetchall()
+            except Exception:
+                pads = []
+
+        conn.close()
+
+        return {
+            "statuses": statuses,
+            "locations": locations,
+            "pads": pads,
+        }
+    except Exception as e:
+        print(f"Error building filters meta: {e}")
+        return {
+            "statuses": [],
+            "locations": [],
+            "pads": [],
+        }
+
+
+
+def _build_launches_query(
+    *,
+    q: Optional[str],
+    status: Optional[list[str]],
+    location_id: Optional[list[int]],
+    pad_id: Optional[list[int]],
+    from_time: Optional[datetime],
+    to_time: Optional[datetime],
+    upcoming: Optional[bool],
+    offset: int,
+    limit: int,
+    sort: str,
+) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(l.name ILIKE %s OR p.name ILIKE %s OR loc.name ILIKE %s)"
+        )
+        params.extend([like, like, like])
+
+    if status:
+        clauses.append("l.status = ANY(%s)")
+        params.append(status)
+
+    if location_id:
+        clauses.append("l.location_id = ANY(%s)")
+        params.append(location_id)
+
+    if pad_id:
+        clauses.append("l.pad_id = ANY(%s)")
+        params.append(pad_id)
+
+    if from_time:
+        clauses.append("l.net >= %s")
+        params.append(from_time)
+
+    if to_time:
+        clauses.append("l.net <= %s")
+        params.append(to_time)
+
+    if upcoming is True:
+        clauses.append("l.net >= now()")
+
+    where_sql = ""
+    if clauses:
+        where_sql = "WHERE " + " AND ".join(clauses)
+
+    if sort not in {"net_desc", "net_asc"}:
+        sort = "net_desc"
+
+    order_sql = "ORDER BY l.net DESC" if sort == "net_desc" else "ORDER BY l.net ASC"
+
+    sql = f"""
+        SELECT
+            l.id,
+            l.name AS mission_name,
+            l.net AS launch_time,
+            l.status,
+            l.last_updated,
+
+            l.location_id,
+            loc.name AS location_name,
+            loc.country_code AS location_country_code,
+
+            l.pad_id,
+            p.name AS pad_name,
+            p.latitude AS pad_latitude,
+            p.longitude AS pad_longitude,
+
+            l.pad AS legacy_pad
+        FROM launches l
+        LEFT JOIN locations loc ON l.location_id = loc.id
+        LEFT JOIN pads p ON l.pad_id = p.id
+        {where_sql}
+        {order_sql}
+        OFFSET %s
+        LIMIT %s
+    """
+
+    params.extend([offset, limit])
+    return sql, params
+
+
 @app.get("/api/v1/launches", response_model=List[Launch])
 def list_launches(
     response: Response,
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=200),
+    sort: str = Query("net_desc"),
+    q: Optional[str] = Query(None, description="Free-text search over mission/pad/location"),
+    status: Optional[list[str]] = Query(None, description="Repeatable status filter"),
+    location_id: Optional[list[int]] = Query(None, description="Repeatable location_id filter"),
+    pad_id: Optional[list[int]] = Query(None, description="Repeatable pad_id filter"),
+    from_time: Optional[datetime] = Query(None, description="Filter: net >= from_time"),
+    to_time: Optional[datetime] = Query(None, description="Filter: net <= to_time"),
+    upcoming: Optional[bool] = Query(None, description="If true, only future launches"),
 ):
-    """List launches from DB (newest first). Supports offset/limit."""
-    cache_key = (offset, limit)
+    """List launches with server-side filtering + pagination."""
+
+    cache_key = (
+        offset,
+        limit,
+        sort,
+        q,
+        tuple(status or []),
+        tuple(location_id or []),
+        tuple(pad_id or []),
+        from_time.isoformat() if from_time else None,
+        to_time.isoformat() if to_time else None,
+        upcoming,
+    )
 
     cached = _cache_get(cache_key)
     if cached is not None:
@@ -103,23 +294,22 @@ def list_launches(
         return cached
 
     try:
+        sql, params = _build_launches_query(
+            q=q,
+            status=status,
+            location_id=location_id,
+            pad_id=pad_id,
+            from_time=from_time,
+            to_time=to_time,
+            upcoming=upcoming,
+            offset=offset,
+            limit=limit,
+            sort=sort,
+        )
+
         conn = get_db_conn()
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    name as mission_name,
-                    net as launch_time,
-                    pad as location_name,
-                    status
-                FROM launches
-                ORDER BY net DESC
-                OFFSET %s
-                LIMIT %s
-                """,
-                (offset, limit),
-            )
+            cur.execute(sql, params)
             rows = cur.fetchall()
         conn.close()
 
@@ -130,7 +320,6 @@ def list_launches(
         return rows
     except Exception as e:
         print(f"Error fetching launches: {e}")
-        # Return empty list if DB not ready or error
         return []
 
 
@@ -142,13 +331,26 @@ def get_launch(launch_id: str):
             cur.execute(
                 """
                 SELECT
-                    id,
-                    name as mission_name,
-                    net as launch_time,
-                    pad as location_name,
-                    status
-                FROM launches
-                WHERE id = %s
+                    l.id,
+                    l.name AS mission_name,
+                    l.net AS launch_time,
+                    l.status,
+                    l.last_updated,
+
+                    l.location_id,
+                    loc.name AS location_name,
+                    loc.country_code AS location_country_code,
+
+                    l.pad_id,
+                    p.name AS pad_name,
+                    p.latitude AS pad_latitude,
+                    p.longitude AS pad_longitude,
+
+                    l.pad AS legacy_pad
+                FROM launches l
+                LEFT JOIN locations loc ON l.location_id = loc.id
+                LEFT JOIN pads p ON l.pad_id = p.id
+                WHERE l.id = %s
                 """,
                 (launch_id,),
             )
