@@ -113,6 +113,21 @@ This sprint focuses on transforming the E2O Monitoring Dashboard from a raw list
    - Status Indicators & Color Coding
    - Health Monitoring & Logging
 
-3. **Phase 3: Visual Polish (P3)**
-   - Mission Timeline View
-   - Launch Map Integration
+---
+
+## 📈 Next Steps (Strategic Alignment)
+
+The current roadmap has been expanded beyond Sprint 2. See `docs/ROADMAP.md` for the full 3-horizon plan.
+
+**Key Upcoming Deliverables:**
+1. **Horizon 1: Near-Term (Hardening)**
+   - Migrations service (DB versioning)
+   - Deploy playbook (one-click infra)
+   - Remove bootstrap script reliance
+2. **Horizon 2: Mid-Term (Geo/Overlay)**
+   - Geo-spatial API layer
+   - Exemplar overlays (Landing Zones, Drone Ships)
+3. **Horizon 3: Long-Term (Platform)**
+   - Auth/RBAC
+   - Observability & Incident Response Hooks
+   - Data Provenance
