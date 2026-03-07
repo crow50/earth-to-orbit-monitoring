@@ -85,7 +85,7 @@ smoke-local: ## Run local smoke tests against running services
 .PHONY: migrate-local
 migrate-local: ## Run database migrations locally via db-migrate service
 	@echo "Running database migrations..."
-	$(COMPOSE_CMD) run --rm db-migrate
+	$(COMPOSE_CMD) run --rm --build db-migrate
 
 # Production workflow helpers
 .PHONY: deploy-prod
@@ -98,8 +98,8 @@ deploy-prod: ## Production deployment workflow (Dry run by default)
 	@echo "Target Directory: $(DEPLOY_DIR)"
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "--- DRY RUN ---"; \
-		echo "ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps'"; \
+		echo "ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm --build db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps'"; \
 	else \
 		echo "Executing deployment..."; \
-		ssh $(DEPLOY_HOST) "cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps"; \
+		ssh $(DEPLOY_HOST) "cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm --build db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps"; \
 	fi

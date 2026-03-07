@@ -21,7 +21,8 @@ docker compose pull
 docker compose build --pull
 
 # Run DB migrations (one-shot)
-docker compose run --rm migrate
+# Use --build to avoid running a stale migration image after code changes.
+docker compose run --rm --build db-migrate
 
 # Bring up the stack
 docker compose up -d
