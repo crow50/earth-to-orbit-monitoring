@@ -293,6 +293,10 @@ export default function App() {
 
   const shouldShowLandingZones = Boolean(selectedLaunchId && selectedRecoveryOverlay);
 
+  const hasTwoPopups = Boolean(selectedLaunchId && selectedRecoveryOverlay);
+  const launchPopupOffset = hasTwoPopups ? [-14, -8] : [0, 0];
+  const landingPopupOffset = hasTwoPopups ? [14, -8] : [0, 0];
+
   // When a tile is selected, open the corresponding map popups (launch + landing)
   // to mimic direct marker clicks.
   useEffect(() => {
@@ -652,8 +656,8 @@ export default function App() {
                       <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
                         Landing Zone: {o.name}
                       </Tooltip>
-                      <Popup offset={[14, -8]}>
-                        <div style={{ minWidth: 220 }}>
+                      <Popup offset={landingPopupOffset} maxWidth={260} minWidth={180}>
+                        <div style={{ maxWidth: 260 }}>
                           <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Landing Zone</div>
                           <div style={{ color: '#fff', marginBottom: 6 }}>{o.name}</div>
                           <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
@@ -678,8 +682,8 @@ export default function App() {
                   if (ref) launchMarkerRefs.current.set(p.id, ref);
                 }}
               >
-                <Popup offset={[-14, -8]}>
-                  <div style={{ minWidth: 220 }}>
+                <Popup offset={launchPopupOffset} maxWidth={300} minWidth={200}>
+                  <div style={{ maxWidth: 280 }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
                     <div style={{ marginBottom: 6 }}>
                       <span
