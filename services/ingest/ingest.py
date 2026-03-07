@@ -12,56 +12,31 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rock
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 
 
-def init_db(conn):
-    """Best-effort bootstrap for environments not running Alembic migrations."""
+def assert_schema_ready(conn):
+    """Fail fast if the DB schema isn't present.
+
+    Migrations are owned by Alembic via the `db-migrate` service; runtime services
+    must not create/alter tables opportunistically.
+    """
+    required = [
+        "alembic_version",
+        "locations",
+        "pads",
+        "launches",
+    ]
     with conn.cursor() as cur:
-        # Core tables
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS locations (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                country_code TEXT
-            );
-            """
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS pads (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                location_id INTEGER REFERENCES locations(id),
-                latitude DOUBLE PRECISION,
-                longitude DOUBLE PRECISION
-            );
-            """
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS launches (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                net TIMESTAMPTZ,
-                status TEXT,
-                pad TEXT,
-                pad_id INTEGER,
-                location_id INTEGER,
-                last_updated TIMESTAMPTZ,
-                notified_24h BOOLEAN DEFAULT FALSE,
-                notified_1h BOOLEAN DEFAULT FALSE,
-                notified_15m BOOLEAN DEFAULT FALSE
-            );
-            """
-        )
+        missing = []
+        for table in required:
+            cur.execute("SELECT to_regclass(%s);", (f"public.{table}",))
+            if cur.fetchone()[0] is None:
+                missing.append(table)
 
-        # Forward-compatible alters (if older table already exists).
-        cur.execute("ALTER TABLE launches ADD COLUMN IF NOT EXISTS pad_id INTEGER")
-
-        # Useful indexes (safe if they already exist).
-        cur.execute("CREATE INDEX IF NOT EXISTS ix_launches_location_id ON launches(location_id)")
-        cur.execute("CREATE INDEX IF NOT EXISTS ix_launches_pad_id ON launches(pad_id)")
-
-    conn.commit()
+    if missing:
+        raise RuntimeError(
+            "Database schema is not ready (missing: "
+            + ", ".join(missing)
+            + "). Run migrations: docker compose run --rm --build db-migrate"
+        )
 
 
 def fetch_launches(url, *, params=None):
@@ -200,7 +175,8 @@ def main():
         print("Could not connect to DB")
         return
 
-    init_db(conn)
+    # Fail fast if migrations were not applied.
+    assert_schema_ready(conn)
 
     while True:
         print(f"--- Poll cycle started at {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
