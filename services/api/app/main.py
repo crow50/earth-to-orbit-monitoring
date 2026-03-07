@@ -37,6 +37,11 @@ class Launch(BaseModel):
     pad_latitude: Optional[float] = None
     pad_longitude: Optional[float] = None
 
+    # Recovery (nullable; filled over time)
+    recovery_attempted: Optional[bool] = None
+    recovery_success: Optional[bool] = None
+    recovery_overlay_id: Optional[int] = None
+
     # Backward-compat
     # (previously overloaded `location_name` with pad string)
     legacy_pad: Optional[str] = None
@@ -78,6 +83,16 @@ class Overlay(BaseModel):
     properties: dict = Field(default_factory=dict)
     source: Optional[str] = None
     is_active: bool = True
+
+
+class RecoveryEvent(BaseModel):
+    launch_id: str
+    attempted: bool = False
+    success: Optional[bool] = None
+    overlay_id: Optional[int] = None
+    method: Optional[str] = None
+    provider: Optional[str] = None
+    raw: dict = Field(default_factory=dict)
 
 
 app = FastAPI(
@@ -277,10 +292,15 @@ def _build_launches_query(
             p.latitude AS pad_latitude,
             p.longitude AS pad_longitude,
 
+            r.attempted AS recovery_attempted,
+            r.success AS recovery_success,
+            r.overlay_id AS recovery_overlay_id,
+
             l.pad AS legacy_pad
         FROM launches l
         LEFT JOIN locations loc ON l.location_id = loc.id
         LEFT JOIN pads p ON l.pad_id = p.id
+        LEFT JOIN recovery_events r ON r.launch_id = l.id
         {where_sql}
         {order_sql}
         OFFSET %s
@@ -387,10 +407,15 @@ def get_launch(launch_id: str):
                     p.latitude AS pad_latitude,
                     p.longitude AS pad_longitude,
 
+                    r.attempted AS recovery_attempted,
+                    r.success AS recovery_success,
+                    r.overlay_id AS recovery_overlay_id,
+
                     l.pad AS legacy_pad
                 FROM launches l
                 LEFT JOIN locations loc ON l.location_id = loc.id
                 LEFT JOIN pads p ON l.pad_id = p.id
+                LEFT JOIN recovery_events r ON r.launch_id = l.id
                 WHERE l.id = %s
                 """,
                 (launch_id,),
