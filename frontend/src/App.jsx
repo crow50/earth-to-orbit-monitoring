@@ -76,6 +76,19 @@ function MapFitBounds({ points, enabled }) {
   return null;
 }
 
+function MapSelectionFlyTo({ selectedPoint }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!selectedPoint) return;
+    map.flyTo([selectedPoint.lat, selectedPoint.lon], Math.max(map.getZoom(), 6), {
+      duration: 0.8,
+    });
+  }, [map, selectedPoint]);
+
+  return null;
+}
+
 function Countdown({ targetDate }) {
   const [state, setState] = useState(null);
 
@@ -141,6 +154,8 @@ export default function App() {
   const [selectedStatuses, setSelectedStatuses] = useState([]);
   const [selectedLocationIds, setSelectedLocationIds] = useState([]);
   const [upcomingOnly, setUpcomingOnly] = useState(true);
+
+  const [selectedLaunchId, setSelectedLaunchId] = useState(null);
 
   // Date range (date-only UI; sent as UTC timestamps)
   const [fromDate, setFromDate] = useState('');
@@ -268,6 +283,12 @@ export default function App() {
         lon: l.pad_longitude,
       }));
   }, [launches]);
+
+
+  const selectedPoint = useMemo(() => {
+    if (!selectedLaunchId) return null;
+    return mapPoints.find((p) => p.id === selectedLaunchId) || null;
+  }, [mapPoints, selectedLaunchId]);
 
   const mapCenter = mapPoints.length ? [mapPoints[0].lat, mapPoints[0].lon] : [20, 0];
 
@@ -471,7 +492,7 @@ export default function App() {
         </div>
         <div style={{ height: 420 }}>
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
-            <MapFitBounds points={mapPoints} enabled={!loading} selectedLaunchId={selectedLaunchId} />
+            <MapFitBounds points={mapPoints} enabled={!loading} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
