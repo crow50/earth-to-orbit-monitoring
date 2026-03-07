@@ -143,8 +143,8 @@ def _find_landing_attempt(launch: dict) -> dict | None:
 
 def _upsert_overlay_from_landing(cur, landing: dict) -> int | None:
     """Upsert an overlay record from a landing object; return overlay_id."""
-    location = landing.get("location") or {}
-    name = location.get("name") or landing.get("name")
+    ll_loc = landing.get("landing_location") or landing.get("location") or {}
+    name = ll_loc.get("name") or landing.get("name")
     if not name:
         return None
 
@@ -153,11 +153,11 @@ def _upsert_overlay_from_landing(cur, landing: dict) -> int | None:
     abbrev = (ltype.get("abbrev") or "").upper()
     overlay_type = "asds" if abbrev == "ASDS" else "landing_zone"
 
-    lat = _safe_float(location.get("latitude"))
-    lon = _safe_float(location.get("longitude"))
+    lat = _safe_float(ll_loc.get("latitude"))
+    lon = _safe_float(ll_loc.get("longitude"))
 
     if lat is None or lon is None:
-        # If we can't locate it, keep it unmapped for now.
+        # If we can't locate it (common for ASDS), keep it unmapped for now.
         return None
 
     import json
@@ -167,7 +167,7 @@ def _upsert_overlay_from_landing(cur, landing: dict) -> int | None:
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
         "properties": {
             "kind": overlay_type,
-            "ll_location_id": location.get("id"),
+            "ll_location_id": ll_loc.get("id"),
             "ll_type": abbrev or None,
         },
     }
