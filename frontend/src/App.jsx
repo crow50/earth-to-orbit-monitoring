@@ -51,7 +51,7 @@ function toUtcIsoFromDateOnly(dateStr, { endOfDay = false } = {}) {
   return `${dateStr}${suffix}`;
 }
 
-function MapFitBounds({ points, enabled }) {
+function MapFitBounds({ points, enabled, resetNonce }) {
   const map = useMap();
   const lastBoundsRef = useRef(null);
 
@@ -62,7 +62,7 @@ function MapFitBounds({ points, enabled }) {
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
 
     const prev = lastBoundsRef.current;
-    if (prev) {
+    if (prev && !resetNonce) {
       // Only re-fit if bounds materially change (prevents snapping due to polling refreshes).
       const a = prev.toBBoxString();
       const b = bounds.toBBoxString();
@@ -71,7 +71,7 @@ function MapFitBounds({ points, enabled }) {
 
     map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
     lastBoundsRef.current = bounds;
-  }, [map, points, enabled]);
+  }, [map, points, enabled, resetNonce]);
 
   return null;
 }
@@ -175,41 +175,53 @@ export default function App() {
   const [overlays, setOverlays] = useState([]);
 
   // Filters (server-side)
+  // Draft filter state (user can edit multiple fields, then Apply)
   const [q, setQ] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState([]);
   const [selectedLocationIds, setSelectedLocationIds] = useState([]);
   const [upcomingOnly, setUpcomingOnly] = useState(true);
+
+  // Applied filter state (drives queries + URL)
+  const [aq, setAq] = useState('');
+  const [aSelectedStatuses, setASelectedStatuses] = useState([]);
+  const [aSelectedLocationIds, setASelectedLocationIds] = useState([]);
+  const [aUpcomingOnly, setAUpcomingOnly] = useState(true);
 
   const [selectedLaunchId, setSelectedLaunchId] = useState(null);
 
   // Date range (date-only UI; sent as UTC timestamps)
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [aFromDate, setAFromDate] = useState('');
+  const [aToDate, setAToDate] = useState('');
+
+  const [mapResetNonce, setMapResetNonce] = useState(0);
 
   const hasExplicitRange = Boolean(fromDate || toDate);
+  const hasExplicitRangeApplied = Boolean(aFromDate || aToDate);
 
   const didInitFromUrl = useRef(false);
 
   const queryParams = useMemo(() => {
     const params = {};
-    if (q.trim()) params.q = q.trim();
-    if (selectedStatuses.length) params.status = selectedStatuses;
-    if (selectedLocationIds.length) params.location_id = selectedLocationIds;
+    if (aq.trim()) params.q = aq.trim();
+    if (aSelectedStatuses.length) params.status = aSelectedStatuses;
+    if (aSelectedLocationIds.length) params.location_id = aSelectedLocationIds;
 
-    const fromIso = toUtcIsoFromDateOnly(fromDate, { endOfDay: false });
-    const toIso = toUtcIsoFromDateOnly(toDate, { endOfDay: true });
+    const fromIso = toUtcIsoFromDateOnly(aFromDate, { endOfDay: false });
+    const toIso = toUtcIsoFromDateOnly(aToDate, { endOfDay: true });
     if (fromIso) params.from_time = fromIso;
     if (toIso) params.to_time = toIso;
 
     // Upcoming-only makes sense only when no explicit date-range is set.
     const hasExplicitRangeIso = Boolean(fromIso || toIso);
-    if (upcomingOnly && !hasExplicitRangeIso) params.upcoming = true;
+    if (aUpcomingOnly && !hasExplicitRangeIso) params.upcoming = true;
 
     params.limit = 200;
     params.offset = 0;
-    params.sort = upcomingOnly && !hasExplicitRangeIso ? 'net_asc' : 'net_desc';
+    params.sort = aUpcomingOnly && !hasExplicitRangeIso ? 'net_asc' : 'net_desc';
     return params;
-  }, [q, selectedStatuses, selectedLocationIds, upcomingOnly, fromDate, toDate]);
+  }, [aq, aSelectedStatuses, aSelectedLocationIds, aUpcomingOnly, aFromDate, aToDate]);
 
   // Init filter state from the URL querystring (deep-linking)
   useEffect(() => {
@@ -231,6 +243,14 @@ export default function App() {
     setFromDate(from0);
     setToDate(to0);
 
+    // Apply immediately from URL deep-link
+    setAq(q0);
+    setASelectedStatuses(statuses0);
+    setASelectedLocationIds(locations0);
+    if (upcoming0 !== null) setAUpcomingOnly(upcoming0);
+    setAFromDate(from0);
+    setAToDate(to0);
+
     didInitFromUrl.current = true;
   }, []);
 
@@ -239,26 +259,31 @@ export default function App() {
     if (hasExplicitRange && upcomingOnly) setUpcomingOnly(false);
   }, [hasExplicitRange, upcomingOnly]);
 
+  // Same rule for applied filters.
+  useEffect(() => {
+    if (hasExplicitRangeApplied && aUpcomingOnly) setAUpcomingOnly(false);
+  }, [hasExplicitRangeApplied, aUpcomingOnly]);
+
   // Keep URL updated with current filter state
   useEffect(() => {
     if (!didInitFromUrl.current) return;
 
     const sp = new URLSearchParams();
 
-    if (q.trim()) sp.set('q', q.trim());
-    selectedStatuses.forEach((s) => sp.append('status', s));
-    selectedLocationIds.forEach((id) => sp.append('location_id', String(id)));
+    if (aq.trim()) sp.set('q', aq.trim());
+    aSelectedStatuses.forEach((s) => sp.append('status', s));
+    aSelectedLocationIds.forEach((id) => sp.append('location_id', String(id)));
 
-    if (fromDate) sp.set('from', fromDate);
-    if (toDate) sp.set('to', toDate);
+    if (aFromDate) sp.set('from', aFromDate);
+    if (aToDate) sp.set('to', aToDate);
 
     // Only set upcoming=false explicitly; otherwise omit to keep URLs clean.
-    if (upcomingOnly === false) sp.set('upcoming', 'false');
+    if (aUpcomingOnly === false) sp.set('upcoming', 'false');
 
     const qs = sp.toString();
     const nextUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', nextUrl);
-  }, [q, selectedStatuses, selectedLocationIds, upcomingOnly, fromDate, toDate]);
+  }, [aq, aSelectedStatuses, aSelectedLocationIds, aUpcomingOnly, aFromDate, aToDate]);
 
   // Load filter metadata once
   useEffect(() => {
@@ -381,19 +406,14 @@ export default function App() {
   const mapCenter = mapPoints.length ? [mapPoints[0].lat, mapPoints[0].lon] : [20, 0];
 
   const activeFilterCount =
-    (q ? 1 : 0) +
-    (selectedStatuses.length ? 1 : 0) +
-    (selectedLocationIds.length ? 1 : 0) +
-    (fromDate ? 1 : 0) +
-    (toDate ? 1 : 0) +
-    (upcomingOnly ? 1 : 0);
+    (aq ? 1 : 0) +
+    (aSelectedStatuses.length ? 1 : 0) +
+    (aSelectedLocationIds.length ? 1 : 0) +
+    (aFromDate ? 1 : 0) +
+    (aToDate ? 1 : 0) +
+    (aUpcomingOnly ? 1 : 0);
 
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
-
-  // Auto-collapse filters when the user makes a filtering change.
-  useEffect(() => {
-    if (activeFilterCount > 0) setFiltersCollapsed(true);
-  }, [activeFilterCount]);
 
   const [mapHeight, setMapHeight] = useState(380);
 
@@ -469,7 +489,7 @@ export default function App() {
               marginTop: '0.75rem',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '1rem',
+              gap: '1.25rem',
               alignItems: 'end',
             }}
           >
@@ -596,13 +616,52 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
+                // Apply draft filters
+                setAq(q);
+                setASelectedStatuses(selectedStatuses);
+                setASelectedLocationIds(selectedLocationIds);
+                setAFromDate(fromDate);
+                setAToDate(toDate);
+
+                // upcomingOnly applied only if no explicit date range
+                const hasRange = Boolean(fromDate || toDate);
+                setAUpcomingOnly(hasRange ? false : upcomingOnly);
+
+                setFiltersCollapsed(true);
+              }}
+              style={{
+                padding: '0.45rem 0.7rem',
+                borderRadius: 6,
+                border: '1px solid #58a6ff',
+                background: 'rgba(88, 166, 255, 0.1)',
+                color: '#58a6ff',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              Apply
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
                 setQ('');
                 setSelectedStatuses([]);
                 setSelectedLocationIds([]);
                 setFromDate('');
                 setToDate('');
                 setUpcomingOnly(true);
+
+                // Reset applied filters too
+                setAq('');
+                setASelectedStatuses([]);
+                setASelectedLocationIds([]);
+                setAFromDate('');
+                setAToDate('');
+                setAUpcomingOnly(true);
+
                 setSelectedLaunchId(null);
+                setMapResetNonce((n) => n + 1);
               }}
               style={{
                 padding: '0.45rem 0.7rem',
@@ -646,6 +705,9 @@ export default function App() {
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: '1.5rem',
+          position: 'sticky',
+          top: '5.75rem',
+          zIndex: 10,
         }}
       >
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
@@ -687,7 +749,7 @@ export default function App() {
           )}
 
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
-            <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} />
+            <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} resetNonce={mapResetNonce} />
             <MapFitSelectedEndpoints launchPoint={selectedLaunchPoint} recoveryPoint={recoveryPoint} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} />
             <TileLayer
