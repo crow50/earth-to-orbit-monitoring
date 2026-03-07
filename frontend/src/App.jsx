@@ -161,6 +161,9 @@ function Countdown({ targetDate }) {
 }
 
 export default function App() {
+  const launchMarkerRefs = useRef(new Map());
+  const landingMarkerRef = useRef(null);
+
   const [launches, setLaunches] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -289,6 +292,26 @@ export default function App() {
   }, [overlays, selectedLaunch]);
 
   const shouldShowLandingZones = Boolean(selectedLaunchId && selectedRecoveryOverlay);
+
+  // When a tile is selected, open the corresponding map popups (launch + landing)
+  // to mimic direct marker clicks.
+  useEffect(() => {
+    if (!selectedLaunchId) return;
+
+    const m = launchMarkerRefs.current.get(selectedLaunchId);
+    try {
+      m?.openPopup?.();
+    } catch {
+      // ignore
+    }
+
+    // If we have a known landing marker, open it too.
+    try {
+      landingMarkerRef.current?.openPopup?.();
+    } catch {
+      // ignore
+    }
+  }, [selectedLaunchId, selectedRecoveryOverlay]);
 
   const recoveryPoint = useMemo(() => {
     if (!selectedRecoveryOverlay) return null;
@@ -624,11 +647,12 @@ export default function App() {
                         fillOpacity: 0.35,
                         dashArray: '4 4',
                       }}
+                      ref={landingMarkerRef}
                     >
                       <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
                         Landing Zone: {o.name}
                       </Tooltip>
-                      <Popup>
+                      <Popup offset={[14, -8]}>
                         <div style={{ minWidth: 220 }}>
                           <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Landing Zone</div>
                           <div style={{ color: '#fff', marginBottom: 6 }}>{o.name}</div>
@@ -647,8 +671,14 @@ export default function App() {
             )}
 
             {mapPoints.map((p) => (
-              <Marker key={p.id} position={[p.lat, p.lon]}>
-                <Popup>
+              <Marker
+                key={p.id}
+                position={[p.lat, p.lon]}
+                ref={(ref) => {
+                  if (ref) launchMarkerRefs.current.set(p.id, ref);
+                }}
+              >
+                <Popup offset={[-14, -8]}>
                   <div style={{ minWidth: 220 }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
                     <div style={{ marginBottom: 6 }}>
