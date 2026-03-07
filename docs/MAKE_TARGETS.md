@@ -45,7 +45,7 @@ make help
 
 | Target | Description |
 |--------|-------------|
-| `make migrate-local` | Waits for the DB and runs Alembic migrations from the poller service context. |
+| `make migrate-local` | Runs Alembic migrations via the `db-migrate` service (rebuilds image to avoid stale migrations). |
 
 ## Production Deployment Workflow
 
@@ -67,5 +67,6 @@ This executes the following on the remote host:
 1. `git pull --ff-only`
 2. `docker compose pull`
 3. `docker compose build --pull`
-4. `docker compose up -d`
-5. `docker compose ps`
+4. `docker compose run --rm --build db-migrate`
+5. `docker compose up -d`
+6. `docker compose ps`

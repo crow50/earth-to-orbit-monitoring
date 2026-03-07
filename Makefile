@@ -98,8 +98,8 @@ deploy-prod: ## Production deployment workflow (Dry run by default)
 	@echo "Target Directory: $(DEPLOY_DIR)"
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "--- DRY RUN ---"; \
-		echo "ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm --build db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps'"; \
+		echo "ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && git pull --ff-only && (docker compose version >/dev/null 2>&1 && CC=\"docker compose\" || CC=\"docker-compose\") && $CC pull && $CC build --pull && $CC run --rm --build db-migrate && $CC up -d && $CC ps'"; \
 	else \
 		echo "Executing deployment..."; \
-		ssh $(DEPLOY_HOST) "cd $(DEPLOY_DIR) && git pull --ff-only && $(COMPOSE_CMD) pull && $(COMPOSE_CMD) build --pull && $(COMPOSE_CMD) run --rm --build db-migrate && $(COMPOSE_CMD) up -d && $(COMPOSE_CMD) ps"; \
+		ssh $(DEPLOY_HOST) "cd $(DEPLOY_DIR) && git pull --ff-only && if docker compose version >/dev/null 2>&1; then CC='docker compose'; else CC='docker-compose'; fi && $$CC pull && $$CC build --pull && $$CC run --rm --build db-migrate && $$CC up -d && $$CC ps"; \
 	fi
