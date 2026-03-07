@@ -119,17 +119,23 @@ def api_root():
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     """Basic healthcheck suitable for load balancers and monitors."""
+    conn = None
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
             cur.execute("SELECT 1 as ok")
             _ = cur.fetchone()
-        conn.close()
         return {"status": "ok", "db": "ok"}
     except Exception as e:
         # Keep message minimal; logs can hold details.
         print(f"Healthcheck DB error: {e}")
         raise HTTPException(status_code=503, detail="unhealthy")
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.get("/api/v1/meta/filters", response_model=FiltersMeta)

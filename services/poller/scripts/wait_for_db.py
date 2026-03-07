@@ -23,16 +23,17 @@ def main() -> int:
     timeout_s = int(os.getenv("DB_WAIT_TIMEOUT_SECONDS", "60"))
     interval_s = float(os.getenv("DB_WAIT_INTERVAL_SECONDS", "2"))
 
-    started = time.time()
+    engine = create_engine(url, pool_pre_ping=True)
+
+    started = time.monotonic()
     while True:
         try:
-            engine = create_engine(url, pool_pre_ping=True)
             with engine.connect() as conn:
                 conn.exec_driver_sql("SELECT 1")
             print("DB is ready")
             return 0
         except OperationalError as exc:
-            elapsed = time.time() - started
+            elapsed = time.monotonic() - started
             if elapsed > timeout_s:
                 print(f"ERROR: DB not ready after {timeout_s}s: {exc}", file=sys.stderr)
                 return 1

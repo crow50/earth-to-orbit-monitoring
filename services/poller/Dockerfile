@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -19,4 +19,4 @@ COPY scripts ./scripts
 # Install the package (so alembic env imports work)
 RUN python -m pip install --no-cache-dir -e .
 
-CMD ["bash", "-lc", "python /app/scripts/wait_for_db.py && alembic upgrade head"]
+CMD ["sh", "-c", "python /app/scripts/wait_for_db.py && exec alembic upgrade head"]
