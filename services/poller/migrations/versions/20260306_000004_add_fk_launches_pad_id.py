@@ -28,8 +28,14 @@ def upgrade() -> None:
     if "pad_id" not in cols:
         return
 
-    fk_names = {fk.get("name") for fk in insp.get_foreign_keys("launches")}
-    if "fk_launches_pad_id_pads" in fk_names:
+    # If an equivalent FK already exists (even under a different name), do nothing.
+    for fk in insp.get_foreign_keys("launches"):
+        if fk.get("referred_table") != "pads":
+            continue
+        if list(fk.get("constrained_columns") or []) != ["pad_id"]:
+            continue
+        if list(fk.get("referred_columns") or []) != ["id"]:
+            continue
         return
 
     # Enforce referential integrity for normalized joins.

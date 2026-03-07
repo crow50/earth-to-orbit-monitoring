@@ -35,8 +35,9 @@ def upgrade() -> None:
     for name, col in to_add:
         if name not in cols:
             op.add_column("launches", col)
-            # Remove default after backfilling existing rows.
-            op.alter_column("launches", name, server_default=None)
+
+        # Remove default after backfilling existing rows (or from legacy schemas).
+        op.alter_column("launches", name, server_default=None)
 
 
 def downgrade() -> None:
