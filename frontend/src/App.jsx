@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -149,6 +149,10 @@ export default function App() {
 
   const [meta, setMeta] = useState({ statuses: [], locations: [], pads: [] });
 
+  // Overlays (Horizon 2)
+  const [overlayLandingZones, setOverlayLandingZones] = useState(true);
+  const [overlays, setOverlays] = useState([]);
+
   // Filters (server-side)
   const [q, setQ] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState([]);
@@ -241,6 +245,17 @@ export default function App() {
       .get('/api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
+  }, []);
+
+  // Load overlays (Horizon 2) once
+  useEffect(() => {
+    axios
+      .get('/api/v1/overlays', { params: { overlay_type: 'landing_zone', is_active: true } })
+      .then((r) => setOverlays(r.data || []))
+      .catch((e) => {
+        console.error(e);
+        setOverlays([]);
+      });
   }, []);
 
   // Fetch launches (poll)
@@ -424,7 +439,7 @@ export default function App() {
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', paddingBottom: '0.2rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', paddingBottom: '0.2rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#c9d1d9' }}>
               <input
                 type="checkbox"
@@ -434,6 +449,16 @@ export default function App() {
               />
               Upcoming only
             </label>
+
+            <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#c9d1d9' }}>
+              <input
+                type="checkbox"
+                checked={overlayLandingZones}
+                onChange={(e) => setOverlayLandingZones(e.target.checked)}
+              />
+              Landing Zones
+            </label>
+
             <button
               type="button"
               onClick={() => {
@@ -502,6 +527,19 @@ export default function App() {
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
             />
+
+            {/* Overlays */}
+            {overlayLandingZones && overlays.length > 0 && (
+              <GeoJSON
+                data={{ type: 'FeatureCollection', features: overlays.map((o) => o.geometry) }}
+                style={() => ({
+                  color: '#ff9800',
+                  weight: 2,
+                  fillOpacity: 0.1,
+                })}
+              />
+            )}
+
             {mapPoints.map((p) => (
               <Marker key={p.id} position={[p.lat, p.lon]}>
                 <Popup>
