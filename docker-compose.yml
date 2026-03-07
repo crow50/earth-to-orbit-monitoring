@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER: rl
-      POSTGRES_PASSWORD: rlpass
-      POSTGRES_DB: rocket_launch
+      POSTGRES_USER: ${POSTGRES_USER:-rl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rlpass}
+      POSTGRES_DB: ${POSTGRES_DB:-rocket_launch}
     volumes:
       - db-data:/var/lib/postgresql/data
     networks:
@@ -13,7 +13,7 @@ services:
   api:
     build: ./services/api
     environment:
-      DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
+      DATABASE_URL: postgres://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
     ports:
       - "8000:8000"
     depends_on:
@@ -34,10 +34,21 @@ services:
     build: ./services/ingest
     environment:
       POLL_INTERVAL_SECONDS: 3600
-      DATABASE_URL: postgres://rl:rlpass@db:5432/rocket_launch
+      DATABASE_URL: postgres://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
       # Configurable LL2 endpoint/mode (avoid hardcoding dev endpoints in code)
       LL_API_URL: ${LL_API_URL:-https://lldev.thespacedevs.com/2.3.0/launches/}
       LL_API_MODE: ${LL_API_MODE:-detailed}
+    depends_on:
+      - db
+    networks:
+      - rlnet
+
+  migrate:
+    build: ./services/poller
+    environment:
+      # Use explicit SQLAlchemy dialect+driver so we don't rely on psycopg2.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
+      DB_WAIT_TIMEOUT_SECONDS: 90
     depends_on:
       - db
     networks:
