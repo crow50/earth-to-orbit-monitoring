@@ -47,19 +47,31 @@ function parseStringList(values) {
 function toUtcIsoFromDateOnly(dateStr, { endOfDay = false } = {}) {
   if (!dateStr) return null;
   // Treat date-only inputs as UTC to keep behavior deterministic.
-  const suffix = endOfDay ? 'T23:59:59Z' : 'T00:00:00Z';
+  const suffix = endOfDay ? 'T23:59:59.999999Z' : 'T00:00:00Z';
   return `${dateStr}${suffix}`;
 }
 
-function MapFitBounds({ points }) {
+function MapFitBounds({ points, enabled }) {
   const map = useMap();
+  const lastBoundsRef = useRef(null);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!points.length) return;
 
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
+
+    const prev = lastBoundsRef.current;
+    if (prev) {
+      // Only re-fit if bounds materially change (prevents snapping due to polling refreshes).
+      const a = prev.toBBoxString();
+      const b = bounds.toBBoxString();
+      if (a === b) return;
+    }
+
     map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
-  }, [map, points]);
+    lastBoundsRef.current = bounds;
+  }, [map, points, enabled]);
 
   return null;
 }
@@ -134,6 +146,8 @@ export default function App() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  const hasExplicitRange = Boolean(fromDate || toDate);
+
   const didInitFromUrl = useRef(false);
 
   const queryParams = useMemo(() => {
@@ -148,12 +162,12 @@ export default function App() {
     if (toIso) params.to_time = toIso;
 
     // Upcoming-only makes sense only when no explicit date-range is set.
-    const hasExplicitRange = Boolean(fromIso || toIso);
-    if (upcomingOnly && !hasExplicitRange) params.upcoming = true;
+    const hasExplicitRangeIso = Boolean(fromIso || toIso);
+    if (upcomingOnly && !hasExplicitRangeIso) params.upcoming = true;
 
     params.limit = 200;
     params.offset = 0;
-    params.sort = upcomingOnly && !hasExplicitRange ? 'net_asc' : 'net_desc';
+    params.sort = upcomingOnly && !hasExplicitRangeIso ? 'net_asc' : 'net_desc';
     return params;
   }, [q, selectedStatuses, selectedLocationIds, upcomingOnly, fromDate, toDate]);
 
@@ -179,6 +193,11 @@ export default function App() {
 
     didInitFromUrl.current = true;
   }, []);
+
+  // If a date-range is set, force upcomingOnly off so the UI matches behavior.
+  useEffect(() => {
+    if (hasExplicitRange && upcomingOnly) setUpcomingOnly(false);
+  }, [hasExplicitRange, upcomingOnly]);
 
   // Keep URL updated with current filter state
   useEffect(() => {
@@ -434,7 +453,7 @@ export default function App() {
         </div>
         <div style={{ height: 420 }}>
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
-            <MapFitBounds points={mapPoints} />
+            <MapFitBounds points={mapPoints} enabled={!loading} />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
