@@ -70,6 +70,16 @@ class UserPreferences(BaseModel):
     is_enabled: bool = True
 
 
+class Overlay(BaseModel):
+    id: int
+    name: str
+    overlay_type: str
+    geometry: dict
+    properties: dict = Field(default_factory=dict)
+    source: Optional[str] = None
+    is_active: bool = True
+
+
 app = FastAPI(
     title="Earth to Orbit Monitoring Dashboard API",
     version="0.3.0",
@@ -395,6 +405,51 @@ def get_launch(launch_id: str):
     except Exception as e:
         print(f"Error fetching launch {launch_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/v1/overlays", response_model=List[Overlay])
+def list_overlays(
+    overlay_type: Optional[str] = Query(None, description="Filter by overlay_type (e.g., landing_zone)"),
+    is_active: Optional[bool] = Query(True, description="If true, only active overlays"),
+):
+    """List overlays for map rendering (Horizon 2 scaffold)."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            clauses = []
+            params = []
+
+            if overlay_type:
+                clauses.append("overlay_type = %s")
+                params.append(overlay_type)
+
+            if is_active is True:
+                clauses.append("is_active = true")
+
+            where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+            cur.execute(
+                f"""
+                SELECT id, name, overlay_type, geometry, properties, source, is_active
+                FROM overlays
+                {where_sql}
+                ORDER BY overlay_type, name
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+        return rows
+    except Exception as e:
+        # If overlays table isn't present yet in a dev environment, treat as empty.
+        print(f"Error fetching overlays: {e}")
+        return []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.get("/api/v1/preferences/{chat_id}", response_model=UserPreferences)
