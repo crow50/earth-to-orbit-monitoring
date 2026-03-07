@@ -38,6 +38,10 @@ services:
       # Configurable LL2 endpoint/mode (avoid hardcoding dev endpoints in code)
       LL_API_URL: ${LL_API_URL:-https://lldev.thespacedevs.com/2.3.0/launches/}
       LL_API_MODE: ${LL_API_MODE:-detailed}
+      # Dev controls (bounded ingest + provider prioritization)
+      LL_LSP_NAME: ${LL_LSP_NAME:-}
+      LL_LIMIT: ${LL_LIMIT:-20}
+      LL_PAGES_TO_FETCH: ${LL_PAGES_TO_FETCH:-2}
     depends_on:
       - db
     networks:
