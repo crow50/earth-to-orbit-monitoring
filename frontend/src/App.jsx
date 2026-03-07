@@ -422,6 +422,7 @@ export default function App() {
                 setFromDate('');
                 setToDate('');
                 setUpcomingOnly(true);
+                setSelectedLaunchId(null);
               }}
               style={{
                 padding: '0.45rem 0.7rem',
@@ -434,6 +435,23 @@ export default function App() {
             >
               Reset
             </button>
+            {selectedLaunchId && (
+              <button
+                type="button"
+                onClick={() => setSelectedLaunchId(null)}
+                style={{
+                  padding: '0.45rem 0.7rem',
+                  borderRadius: 6,
+                  border: '1px solid #58a6ff',
+                  background: 'rgba(88, 166, 255, 0.1)',
+                  color: '#58a6ff',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                }}
+              >
+                Clear selection
+              </button>
+            )}
             <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
           </div>
         </div>
@@ -453,7 +471,8 @@ export default function App() {
         </div>
         <div style={{ height: 420 }}>
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
-            <MapFitBounds points={mapPoints} enabled={!loading} />
+            <MapFitBounds points={mapPoints} enabled={!loading} selectedLaunchId={selectedLaunchId} />
+            <MapSelectionFlyTo selectedPoint={selectedPoint} />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -495,15 +514,26 @@ export default function App() {
         {launches.map((l) => (
           <div
             key={l.id}
+            onClick={() => setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id);
+              }
+            }}
+            tabIndex={0}
             style={{
               backgroundColor: '#161b22',
               borderRadius: 8,
               padding: '1.25rem',
-              border: '1px solid #30363d',
+              border: l.id === selectedLaunchId ? '2px solid #58a6ff' : '1px solid #30363d',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+              boxShadow: l.id === selectedLaunchId ? '0 0 15px rgba(88, 166, 255, 0.4)' : '0 4px 6px rgba(0,0,0,0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              transform: l.id === selectedLaunchId ? 'translateY(-2px)' : 'none',
             }}
           >
             <div>
