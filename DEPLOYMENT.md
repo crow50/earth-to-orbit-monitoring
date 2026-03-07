@@ -21,7 +21,8 @@ docker compose pull
 docker compose build --pull
 
 # Run DB migrations (one-shot)
-docker compose run --rm migrate
+# Use --build to avoid running a stale migration image after code changes.
+docker compose run --rm --build db-migrate
 
 # Bring up the stack
 docker compose up -d
@@ -38,4 +39,4 @@ curl -sS 'https://earthtoorbit.space/api/v1/meta/filters' | head -c 500
 
 ## Notes
 - LaunchLibrary (LL2) endpoint defaults to `lldev` to avoid rate limits for now. Override via `LL_API_URL` env when ready.
-- If `docker compose run --rm migrate` fails, **do not** rely on ingest's best-effort schema bootstrap for production correctness; fix migrations first.
+- If `docker compose run --rm --build db-migrate` fails, **do not** rely on ingest's best-effort schema bootstrap for production correctness; fix migrations first.
