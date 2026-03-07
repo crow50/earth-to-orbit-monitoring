@@ -478,135 +478,167 @@ export default function App() {
         </div>
       </header>
 
-      <section
+      <div
         style={{
-          backgroundColor: '#161b22',
-          border: '1px solid #30363d',
-          borderRadius: 8,
-          overflow: 'hidden',
-          marginBottom: '1.5rem',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(340px, 520px) 1fr',
+          gap: '1.25rem',
+          alignItems: 'start',
         }}
       >
-        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
-          Map (OpenStreetMap)
-        </div>
-        <div style={{ height: 420 }}>
-          <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
-            <MapFitBounds points={mapPoints} enabled={!loading} />
-            <MapSelectionFlyTo selectedPoint={selectedPoint} />
-            <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-            />
-            {mapPoints.map((p) => (
-              <Marker key={p.id} position={[p.lat, p.lon]}>
-                <Popup>
-                  <div style={{ minWidth: 220 }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
-                    <div style={{ marginBottom: 6 }}>
-                      <span
-                        style={{
-                          backgroundColor: statusColor(p.status),
-                          color: '#fff',
-                          padding: '0.15rem 0.5rem',
-                          borderRadius: 4,
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {p.status || 'Unknown'}
-                      </span>
+        {/* Sticky map so scrolling tiles doesn't scroll it off-screen */}
+        <section
+          style={{
+            backgroundColor: '#161b22',
+            border: '1px solid #30363d',
+            borderRadius: 8,
+            overflow: 'hidden',
+            position: 'sticky',
+            top: '1rem',
+            height: 'calc(100vh - 2rem)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
+            Map (OpenStreetMap)
+          </div>
+          <div style={{ flex: 1, minHeight: 360 }}>
+            <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
+              <MapFitBounds points={mapPoints} enabled={!loading} />
+              <MapSelectionFlyTo selectedPoint={selectedPoint} />
+              <TileLayer
+                attribution='&copy; OpenStreetMap contributors'
+                url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              />
+              {mapPoints.map((p) => (
+                <Marker key={p.id} position={[p.lat, p.lon]}>
+                  <Popup>
+                    <div style={{ minWidth: 220 }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
+                      <div style={{ marginBottom: 6 }}>
+                        <span
+                          style={{
+                            backgroundColor: statusColor(p.status),
+                            color: '#fff',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: 4,
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {p.status || 'Unknown'}
+                        </span>
+                      </div>
+                      <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.pad_name || ''}</div>
+                      <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
+                      <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
+                      </div>
                     </div>
-                    <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.pad_name || ''}</div>
-                    <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
-                    <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                      {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-        </div>
-      </section>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
+        </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
-        {launches.map((l) => (
-          <div
-            key={l.id}
-            onClick={() => setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id);
-              }
-            }}
-            tabIndex={0}
-            style={{
-              backgroundColor: '#161b22',
-              borderRadius: 8,
-              padding: '1.25rem',
-              border: l.id === selectedLaunchId ? '2px solid #58a6ff' : '1px solid #30363d',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              boxShadow: l.id === selectedLaunchId ? '0 0 15px rgba(88, 166, 255, 0.4)' : '0 4px 6px rgba(0,0,0,0.3)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              transform: l.id === selectedLaunchId ? 'translateY(-2px)' : 'none',
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                <span
+        {/* Scrollable tile pane */}
+        <div
+          style={{
+            maxHeight: 'calc(100vh - 2rem)',
+            overflowY: 'auto',
+            paddingRight: '0.25rem',
+          }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            {launches.map((l) => (
+              <div
+                key={l.id}
+                onClick={() => setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedLaunchId(l.id === selectedLaunchId ? null : l.id);
+                  }
+                }}
+                tabIndex={0}
+                style={{
+                  backgroundColor: '#161b22',
+                  borderRadius: 8,
+                  padding: '1.25rem',
+                  border: l.id === selectedLaunchId ? '2px solid #58a6ff' : '1px solid #30363d',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow:
+                    l.id === selectedLaunchId ? '0 0 15px rgba(88, 166, 255, 0.4)' : '0 4px 6px rgba(0,0,0,0.3)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  transform: l.id === selectedLaunchId ? 'translateY(-2px)' : 'none',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                    <span
+                      style={{
+                        backgroundColor: statusColor(l.status),
+                        color: '#fff',
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: 4,
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {l.status || 'Unknown'}
+                    </span>
+                    <Countdown targetDate={l.launch_time} />
+                  </div>
+
+                  <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.5rem', color: '#58a6ff' }}>
+                    {l.mission_name || 'Unknown Mission'}
+                  </h2>
+
+                  <div style={{ marginBottom: 6 }}>
+                    <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
+                    <span style={{ color: '#c9d1d9' }}>{l.pad_name || l.legacy_pad || 'TBD'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
+                    <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
+                  </div>
+                </div>
+
+                <div
                   style={{
-                    backgroundColor: statusColor(l.status),
-                    color: '#fff',
-                    padding: '0.25rem 0.6rem',
-                    borderRadius: 4,
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
+                    marginTop: '1.25rem',
+                    paddingTop: '1rem',
+                    borderTop: '1px solid #30363d',
+                    fontSize: '0.85rem',
+                    color: '#8b949e',
                   }}
                 >
-                  {l.status || 'Unknown'}
-                </span>
-                <Countdown targetDate={l.launch_time} />
+                  {l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}
+                </div>
               </div>
+            ))}
 
-              <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.5rem', color: '#58a6ff' }}>
-                {l.mission_name || 'Unknown Mission'}
-              </h2>
-
-              <div style={{ marginBottom: 6 }}>
-                <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
-                <span style={{ color: '#c9d1d9' }}>{l.pad_name || l.legacy_pad || 'TBD'}</span>
+            {!loading && launches.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
+                No results. Try widening filters.
               </div>
-              <div>
-                <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
-                <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
+            )}
+
+            {loading && launches.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
+                Loading…
               </div>
-            </div>
-
-            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #30363d', fontSize: '0.85rem', color: '#8b949e' }}>
-              {l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}
-            </div>
+            )}
           </div>
-        ))}
-
-        {!loading && launches.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
-            No results. Try widening filters.
-          </div>
-        )}
-
-        {loading && launches.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
-            Loading…
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
