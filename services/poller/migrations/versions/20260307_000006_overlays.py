@@ -95,7 +95,7 @@ def upgrade() -> None:
             sa.text(
                 """
                 INSERT INTO overlays (name, overlay_type, geometry, properties, source, is_active)
-                VALUES (:name, :overlay_type, :geometry::jsonb, :properties::jsonb, :source, true)
+                VALUES (:name, :overlay_type, CAST(:geometry AS jsonb), CAST(:properties AS jsonb), :source, true)
                 """
             ).bindparams(
                 name=s["name"],
