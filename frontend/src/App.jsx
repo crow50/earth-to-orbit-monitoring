@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { GeoJSON, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Marker, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -519,7 +519,39 @@ export default function App() {
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
           Map (OpenStreetMap)
         </div>
-        <div style={{ height: 380 }}>
+        <div style={{ height: 380, position: 'relative' }}>
+          <div
+            style={{
+              position: 'absolute',
+              right: 10,
+              top: 10,
+              zIndex: 1000,
+              background: 'rgba(11, 14, 20, 0.85)',
+              border: '1px solid #30363d',
+              borderRadius: 8,
+              padding: '0.5rem 0.6rem',
+              fontSize: '0.8rem',
+              color: '#c9d1d9',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <div style={{ fontWeight: 'bold', marginBottom: 4, color: '#fff' }}>Legend</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 12,
+                  height: 12,
+                  borderRadius: 999,
+                  border: '2px dashed #ff9800',
+                  background: 'rgba(255,152,0,0.35)',
+                }}
+              />
+              <span>Landing Zone</span>
+            </div>
+            <div style={{ marginTop: 4, color: '#8b949e' }}>Launch pads use default pin markers.</div>
+          </div>
+
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
             <MapFitBounds points={mapPoints} enabled={!loading} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} />
@@ -530,14 +562,62 @@ export default function App() {
 
             {/* Overlays */}
             {overlayLandingZones && overlays.length > 0 && (
-              <GeoJSON
-                data={{ type: 'FeatureCollection', features: overlays.map((o) => o.geometry) }}
-                style={() => ({
-                  color: '#ff9800',
-                  weight: 2,
-                  fillOpacity: 0.1,
-                })}
-              />
+              <>
+                {/* Landing Zones as visually distinct markers */}
+                {overlays
+                  .filter((o) => o.overlay_type === 'landing_zone')
+                  .map((o) => {
+                    const g = o.geometry?.geometry;
+                    if (!g || g.type !== 'Point' || !Array.isArray(g.coordinates)) return null;
+                    const [lon, lat] = g.coordinates;
+                    if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+                    return (
+                      <CircleMarker
+                        key={`lz-${o.id}`}
+                        center={[lat, lon]}
+                        radius={9}
+                        pathOptions={{
+                          color: '#ff9800',
+                          weight: 3,
+                          fillColor: '#ff9800',
+                          fillOpacity: 0.35,
+                          dashArray: '4 4',
+                        }}
+                      >
+                        <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
+                          Landing Zone: {o.name}
+                        </Tooltip>
+                        <Popup>
+                          <div style={{ minWidth: 220 }}>
+                            <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Landing Zone</div>
+                            <div style={{ color: '#fff', marginBottom: 6 }}>{o.name}</div>
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
+                              {o.properties?.site ? `Site: ${o.properties.site}` : ''}
+                            </div>
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
+                              {o.properties?.operator ? `Operator: ${o.properties.operator}` : ''}
+                            </div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+
+                {/* Future-proof: render non-point overlays via GeoJSON */}
+                <GeoJSON
+                  data={{
+                    type: 'FeatureCollection',
+                    features: overlays
+                      .filter((o) => o.geometry?.geometry?.type !== 'Point')
+                      .map((o) => o.geometry),
+                  }}
+                  style={() => ({
+                    color: '#ff9800',
+                    weight: 2,
+                    fillOpacity: 0.1,
+                  })}
+                />
+              </>
             )}
 
             {mapPoints.map((p) => (
