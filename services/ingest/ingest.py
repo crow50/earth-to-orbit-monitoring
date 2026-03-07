@@ -122,6 +122,127 @@ def upsert_locations_and_pads(conn, launches):
     conn.commit()
 
 
+def _find_landing_attempt(launch: dict) -> dict | None:
+    """Extract a single best landing attempt from Launch Library payload.
+
+    LL2 often places landing info under `rocket.launcher_stage[*].landing`.
+    We prefer the first stage landing attempt when present.
+    """
+    rocket = launch.get("rocket") or {}
+    stages = rocket.get("launcher_stage") or []
+    for st in stages:
+        landing = st.get("landing")
+        if not isinstance(landing, dict):
+            continue
+        # Some payloads use booleans like attempted_landings / attempt
+        attempted = landing.get("attempt")
+        if attempted is True:
+            return landing
+    return None
+
+
+def _upsert_overlay_from_landing(cur, landing: dict) -> int | None:
+    """Upsert an overlay record from a landing object; return overlay_id."""
+    location = landing.get("location") or {}
+    name = location.get("name") or landing.get("name")
+    if not name:
+        return None
+
+    # Determine overlay type.
+    ltype = landing.get("type") or {}
+    abbrev = (ltype.get("abbrev") or "").upper()
+    overlay_type = "asds" if abbrev == "ASDS" else "landing_zone"
+
+    lat = _safe_float(location.get("latitude"))
+    lon = _safe_float(location.get("longitude"))
+
+    if lat is None or lon is None:
+        # If we can't locate it, keep it unmapped for now.
+        return None
+
+    import json
+
+    feature = {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": {
+            "kind": overlay_type,
+            "ll_location_id": location.get("id"),
+            "ll_type": abbrev or None,
+        },
+    }
+
+    cur.execute(
+        """
+        INSERT INTO overlays (name, overlay_type, geometry, properties, source, is_active)
+        VALUES (%s, %s, %s::jsonb, %s::jsonb, %s, true)
+        ON CONFLICT (overlay_type, name) DO UPDATE SET
+            geometry = EXCLUDED.geometry,
+            properties = EXCLUDED.properties,
+            updated_at = now(),
+            is_active = true
+        RETURNING id
+        """,
+        (
+            name,
+            overlay_type,
+            json.dumps(feature),
+            json.dumps({"ll": landing}),
+            "launchlibrary",
+        ),
+    )
+    return cur.fetchone()[0]
+
+
+def upsert_recovery_events(conn, launches):
+    with conn.cursor() as cur:
+        for l in launches:
+            launch_id = l.get("id")
+            if not launch_id:
+                continue
+
+            landing = _find_landing_attempt(l)
+            if not landing:
+                continue
+
+            attempted = bool(landing.get("attempt"))
+            success = landing.get("success")
+            if success is not None:
+                success = bool(success)
+
+            overlay_id = _upsert_overlay_from_landing(cur, landing)
+
+            method = ((landing.get("type") or {}).get("abbrev") or None)
+
+            import json
+
+            cur.execute(
+                """
+                INSERT INTO recovery_events (launch_id, attempted, success, overlay_id, method, provider, raw)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                ON CONFLICT (launch_id) DO UPDATE SET
+                    attempted = EXCLUDED.attempted,
+                    success = EXCLUDED.success,
+                    overlay_id = EXCLUDED.overlay_id,
+                    method = EXCLUDED.method,
+                    provider = EXCLUDED.provider,
+                    raw = EXCLUDED.raw,
+                    updated_at = now()
+                """,
+                (
+                    launch_id,
+                    attempted,
+                    success,
+                    overlay_id,
+                    method,
+                    "launchlibrary",
+                    json.dumps({"landing": landing}),
+                ),
+            )
+
+    conn.commit()
+
+
 def upsert_launches(conn, launches):
     with conn.cursor() as cur:
         data = []
@@ -205,6 +326,7 @@ def main():
                 # Normalize supporting tables first.
                 upsert_locations_and_pads(conn, results)
                 upsert_launches(conn, results)
+                upsert_recovery_events(conn, results)
 
                 url = data.get("next")
                 params = None
