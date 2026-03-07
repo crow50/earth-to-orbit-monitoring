@@ -43,12 +43,13 @@ services:
     networks:
       - rlnet
 
-  migrate:
-    build: ./services/poller
+  db-migrate:
+    build:
+      context: .
+      dockerfile: services/db-migrate/Dockerfile
     environment:
-      # Use explicit SQLAlchemy dialect+driver so we don't rely on psycopg2.
+      # Schema owner remains services/poller; this service just runs the migrations.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
-      DB_WAIT_TIMEOUT_SECONDS: 90
     depends_on:
       - db
     networks:
