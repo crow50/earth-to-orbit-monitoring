@@ -116,7 +116,7 @@ def api_root():
     return RedirectResponse(url="/api/docs")
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     """Basic healthcheck suitable for load balancers and monitors."""
     try:

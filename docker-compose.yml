@@ -43,6 +43,17 @@ services:
     networks:
       - rlnet
 
+  migrate:
+    build: ./services/poller
+    environment:
+      # Use explicit SQLAlchemy dialect+driver so we don't rely on psycopg2.
+      DATABASE_URL: postgresql+psycopg://rl:rlpass@db:5432/rocket_launch
+      DB_WAIT_TIMEOUT_SECONDS: 90
+    depends_on:
+      - db
+    networks:
+      - rlnet
+
 volumes:
   db-data:
 
