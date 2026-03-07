@@ -33,6 +33,7 @@ services:
   ingest:
     build: ./services/ingest
     environment:
+      PYTHONUNBUFFERED: 1
       POLL_INTERVAL_SECONDS: 3600
       DATABASE_URL: postgres://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
       # Configurable LL2 endpoint/mode (avoid hardcoding dev endpoints in code)
