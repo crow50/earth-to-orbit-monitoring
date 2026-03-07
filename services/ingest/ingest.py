@@ -8,6 +8,9 @@ from psycopg2.extras import execute_values
 
 LL_API = os.environ.get("LL_API_URL", "https://lldev.thespacedevs.com/2.3.0/launches/")
 LL_API_MODE = os.environ.get("LL_API_MODE", "detailed")
+LL_LSP_NAME = os.environ.get("LL_LSP_NAME", "").strip()  # e.g., "SpaceX" to prioritize a provider
+LL_LIMIT = int(os.environ.get("LL_LIMIT", "20"))
+LL_PAGES_TO_FETCH = int(os.environ.get("LL_PAGES_TO_FETCH", "2"))
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rocket_launch")
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 
@@ -182,10 +185,15 @@ def main():
         print(f"--- Poll cycle started at {time.strftime('%Y-%m-%d %H:%M:%S')} ---")
         try:
             url = LL_API
-            pages_to_fetch = 2
+            pages_to_fetch = LL_PAGES_TO_FETCH
 
             # First request sets the desired mode; subsequent pages follow `next`.
             params = {"mode": LL_API_MODE} if LL_API_MODE else None
+            if params is not None and LL_LIMIT:
+                params["limit"] = LL_LIMIT
+            if params is not None and LL_LSP_NAME:
+                # Launch Library supports provider filtering via `lsp__name`.
+                params["lsp__name"] = LL_LSP_NAME
 
             for _ in range(pages_to_fetch):
                 if not url:
