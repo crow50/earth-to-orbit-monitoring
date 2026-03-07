@@ -62,6 +62,14 @@ class FiltersMeta(BaseModel):
     pads: list[PadMeta]
 
 
+class UserPreferences(BaseModel):
+    chat_id: str
+    active_hours_start: str = "00:00"
+    active_hours_end: str = "23:59"
+    location_subscriptions: List[int] = []
+    is_enabled: bool = True
+
+
 app = FastAPI(
     title="Earth to Orbit Monitoring Dashboard API",
     version="0.3.0",
@@ -386,4 +394,59 @@ def get_launch(launch_id: str):
         raise
     except Exception as e:
         print(f"Error fetching launch {launch_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/v1/preferences/{chat_id}", response_model=UserPreferences)
+def get_preferences(chat_id: str):
+    """Get preferences for a specific chat ID."""
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT chat_id, active_hours_start, active_hours_end, location_subscriptions, is_enabled FROM user_preferences WHERE chat_id = %s",
+                (chat_id,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        if not row:
+            # Return defaults if user not found
+            return UserPreferences(chat_id=chat_id)
+        return row
+    except Exception as e:
+        print(f"Error fetching preferences for {chat_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/v1/preferences", response_model=UserPreferences)
+def update_preferences(prefs: UserPreferences):
+    """Create or update user preferences."""
+    try:
+        conn = get_db_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_preferences (chat_id, active_hours_start, active_hours_end, location_subscriptions, is_enabled)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (chat_id) DO UPDATE SET
+                    active_hours_start = EXCLUDED.active_hours_start,
+                    active_hours_end = EXCLUDED.active_hours_end,
+                    location_subscriptions = EXCLUDED.location_subscriptions,
+                    is_enabled = EXCLUDED.is_enabled
+                RETURNING chat_id, active_hours_start, active_hours_end, location_subscriptions, is_enabled
+                """,
+                (
+                    prefs.chat_id,
+                    prefs.active_hours_start,
+                    prefs.active_hours_end,
+                    psycopg2.extras.Json(prefs.location_subscriptions),
+                    prefs.is_enabled,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        conn.close()
+        return row
+    except Exception as e:
+        print(f"Error updating preferences for {prefs.chat_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
