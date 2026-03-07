@@ -380,6 +380,41 @@ export default function App() {
 
   const mapCenter = mapPoints.length ? [mapPoints[0].lat, mapPoints[0].lon] : [20, 0];
 
+  const activeFilterCount =
+    (q ? 1 : 0) +
+    (selectedStatuses.length ? 1 : 0) +
+    (selectedLocationIds.length ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (upcomingOnly ? 1 : 0);
+
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+
+  // Auto-collapse filters when the user makes a filtering change.
+  useEffect(() => {
+    if (activeFilterCount > 0) setFiltersCollapsed(true);
+  }, [activeFilterCount]);
+
+  const [mapHeight, setMapHeight] = useState(380);
+
+  useEffect(() => {
+    const compute = () => {
+      const isMobile = window.innerWidth <= 768;
+      const isLandscape = window.matchMedia?.('(orientation: landscape)').matches;
+      if (isMobile && isLandscape) return 240;
+      return 380;
+    };
+
+    const apply = () => setMapHeight(compute());
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -390,19 +425,54 @@ export default function App() {
         minHeight: '100vh',
       }}
     >
-      <header style={{ marginBottom: '1.5rem', borderBottom: '1px solid #2d333b', paddingBottom: '1rem' }}>
+      <header style={{ marginBottom: '1.0rem', borderBottom: '1px solid #2d333b', paddingBottom: '0.75rem' }}>
         <h1 style={{ margin: 0, color: '#fff', letterSpacing: '1px' }}>EARTH TO ORBIT</h1>
         <p style={{ margin: '0.5rem 0 0', color: '#8b949e' }}>Mission Control Monitoring Dashboard</p>
+      </header>
 
-        <div
-          style={{
-            marginTop: '1rem',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '0.75rem',
-            alignItems: 'end',
-          }}
-        >
+      {/* Sticky filter bar (stays above map when scrolling) */}
+      <section
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          background: '#0b0e14',
+          paddingTop: '0.75rem',
+          paddingBottom: '0.75rem',
+          borderBottom: '1px solid #2d333b',
+          marginBottom: '1.0rem',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+          <button
+            type="button"
+            onClick={() => setFiltersCollapsed((v) => !v)}
+            style={{
+              padding: '0.45rem 0.7rem',
+              borderRadius: 6,
+              border: '1px solid #30363d',
+              background: '#161b22',
+              color: '#c9d1d9',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+          >
+            Filters{activeFilterCount ? ` (${activeFilterCount})` : ''} {filtersCollapsed ? '▸' : '▾'}
+          </button>
+
+          <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
+        </div>
+
+        {!filtersCollapsed && (
+          <div
+            style={{
+              marginTop: '0.75rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '1rem',
+              alignItems: 'end',
+            }}
+          >
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
               Search
@@ -523,8 +593,6 @@ export default function App() {
               Upcoming only
             </label>
 
-            {/* Landing zones are contextual now (appear only when recovery is known), so no global toggle here. */}
-
             <button
               type="button"
               onClick={() => {
@@ -547,6 +615,7 @@ export default function App() {
             >
               Reset
             </button>
+
             {selectedLaunchId && (
               <button
                 type="button"
@@ -564,12 +633,12 @@ export default function App() {
                 Clear selection
               </button>
             )}
-            <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
           </div>
-        </div>
-      </header>
+          </div>
+        )}
+      </section>
 
-      {/* Sticky-top map + normal page scroll (mobile-safe) */}
+      {/* Map */}
       <section
         style={{
           backgroundColor: '#161b22',
@@ -577,15 +646,12 @@ export default function App() {
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: '1.5rem',
-          position: 'sticky',
-          top: 0,
-          zIndex: 5,
         }}
       >
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
           Map (OpenStreetMap)
         </div>
-        <div style={{ height: 380, position: 'relative' }}>
+        <div style={{ height: mapHeight, position: 'relative' }}>
           {shouldShowLandingZones && (
             <div
               style={{
