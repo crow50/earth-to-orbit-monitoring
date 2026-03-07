@@ -9,7 +9,7 @@ import psycopg2
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from psycopg2.extras import RealDictCursor
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://rl:rlpass@db:5432/rocket_launch")
 
@@ -66,7 +66,7 @@ class UserPreferences(BaseModel):
     chat_id: str
     active_hours_start: str = "00:00"
     active_hours_end: str = "23:59"
-    location_subscriptions: List[int] = []
+    location_subscriptions: List[int] = Field(default_factory=list)
     is_enabled: bool = True
 
 
@@ -400,6 +400,7 @@ def get_launch(launch_id: str):
 @app.get("/api/v1/preferences/{chat_id}", response_model=UserPreferences)
 def get_preferences(chat_id: str):
     """Get preferences for a specific chat ID."""
+    conn = None
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
@@ -408,7 +409,6 @@ def get_preferences(chat_id: str):
                 (chat_id,),
             )
             row = cur.fetchone()
-        conn.close()
         if not row:
             # Return defaults if user not found
             return UserPreferences(chat_id=chat_id)
@@ -416,11 +416,18 @@ def get_preferences(chat_id: str):
     except Exception as e:
         print(f"Error fetching preferences for {chat_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.post("/api/v1/preferences", response_model=UserPreferences)
 def update_preferences(prefs: UserPreferences):
     """Create or update user preferences."""
+    conn = None
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
@@ -445,8 +452,18 @@ def update_preferences(prefs: UserPreferences):
             )
             row = cur.fetchone()
         conn.commit()
-        conn.close()
         return row
     except Exception as e:
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         print(f"Error updating preferences for {prefs.chat_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass

@@ -27,7 +27,7 @@ class LaunchRecord:
 
 @dataclass
 class UserPreferences:
-    id: Optional[int]
+    id: Optional[int] = None
     chat_id: str
     active_hours_start: Optional[str] = "00:00"
     active_hours_end: Optional[str] = "23:59"
