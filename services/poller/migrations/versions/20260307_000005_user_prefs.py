@@ -1,6 +1,6 @@
 """create user_preferences table
 
-Revision ID: 20260307_000005_create_user_preferences
+Revision ID: 20260307_000005_user_prefs
 Revises: 20260306_000004
 Create Date: 2026-03-07 12:00:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '20260307_000005_create_user_preferences'
+revision = '20260307_000005_user_prefs'
 down_revision = '20260306_000004'
 branch_labels = None
 depends_on = None
