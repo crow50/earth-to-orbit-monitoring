@@ -8,6 +8,7 @@ Create Date: 2026-03-06 22:08:00
 from __future__ import annotations
 
 from alembic import op
+from sqlalchemy import inspect
 
 revision = "20260306_000004"
 down_revision = "20260306_000003"
@@ -16,6 +17,27 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    insp = inspect(bind)
+
+    tables = set(insp.get_table_names())
+    if "launches" not in tables or "pads" not in tables:
+        return
+
+    cols = {c["name"] for c in insp.get_columns("launches")}
+    if "pad_id" not in cols:
+        return
+
+    # If an equivalent FK already exists (even under a different name), do nothing.
+    for fk in insp.get_foreign_keys("launches"):
+        if fk.get("referred_table") != "pads":
+            continue
+        if list(fk.get("constrained_columns") or []) != ["pad_id"]:
+            continue
+        if list(fk.get("referred_columns") or []) != ["id"]:
+            continue
+        return
+
     # Enforce referential integrity for normalized joins.
     op.create_foreign_key(
         "fk_launches_pad_id_pads",
