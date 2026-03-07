@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -25,6 +25,56 @@ const statusColor = (status) => {
   if (s.includes('tbc') || s.includes('to be confirmed')) return '#ff9800';
   return '#2196f3';
 };
+
+function parseBool(value) {
+  if (value == null) return null;
+  const v = String(value).toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(v)) return false;
+  return null;
+}
+
+function parseIntList(values) {
+  return values
+    .map((v) => Number.parseInt(v, 10))
+    .filter((n) => Number.isFinite(n));
+}
+
+function parseStringList(values) {
+  return values.map((v) => String(v)).filter((s) => s.trim().length > 0);
+}
+
+function toUtcIsoFromDateOnly(dateStr, { endOfDay = false } = {}) {
+  if (!dateStr) return null;
+  // Treat date-only inputs as UTC to keep behavior deterministic.
+  const suffix = endOfDay ? 'T23:59:59.999999Z' : 'T00:00:00Z';
+  return `${dateStr}${suffix}`;
+}
+
+function MapFitBounds({ points, enabled }) {
+  const map = useMap();
+  const lastBoundsRef = useRef(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (!points.length) return;
+
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
+
+    const prev = lastBoundsRef.current;
+    if (prev) {
+      // Only re-fit if bounds materially change (prevents snapping due to polling refreshes).
+      const a = prev.toBBoxString();
+      const b = bounds.toBBoxString();
+      if (a === b) return;
+    }
+
+    map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
+    lastBoundsRef.current = bounds;
+  }, [map, points, enabled]);
+
+  return null;
+}
 
 function Countdown({ targetDate }) {
   const [state, setState] = useState(null);
@@ -92,17 +142,83 @@ export default function App() {
   const [selectedLocationIds, setSelectedLocationIds] = useState([]);
   const [upcomingOnly, setUpcomingOnly] = useState(true);
 
+  // Date range (date-only UI; sent as UTC timestamps)
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  const hasExplicitRange = Boolean(fromDate || toDate);
+
+  const didInitFromUrl = useRef(false);
+
   const queryParams = useMemo(() => {
     const params = {};
     if (q.trim()) params.q = q.trim();
     if (selectedStatuses.length) params.status = selectedStatuses;
     if (selectedLocationIds.length) params.location_id = selectedLocationIds;
-    if (upcomingOnly) params.upcoming = true;
+
+    const fromIso = toUtcIsoFromDateOnly(fromDate, { endOfDay: false });
+    const toIso = toUtcIsoFromDateOnly(toDate, { endOfDay: true });
+    if (fromIso) params.from_time = fromIso;
+    if (toIso) params.to_time = toIso;
+
+    // Upcoming-only makes sense only when no explicit date-range is set.
+    const hasExplicitRangeIso = Boolean(fromIso || toIso);
+    if (upcomingOnly && !hasExplicitRangeIso) params.upcoming = true;
+
     params.limit = 200;
     params.offset = 0;
-    params.sort = upcomingOnly ? 'net_asc' : 'net_desc';
+    params.sort = upcomingOnly && !hasExplicitRangeIso ? 'net_asc' : 'net_desc';
     return params;
-  }, [q, selectedStatuses, selectedLocationIds, upcomingOnly]);
+  }, [q, selectedStatuses, selectedLocationIds, upcomingOnly, fromDate, toDate]);
+
+  // Init filter state from the URL querystring (deep-linking)
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+
+    const q0 = sp.get('q') || '';
+    const statuses0 = parseStringList(sp.getAll('status'));
+    const locations0 = parseIntList(sp.getAll('location_id'));
+    const upcoming0 = parseBool(sp.get('upcoming'));
+
+    // Date-only form: from=YYYY-MM-DD, to=YYYY-MM-DD
+    const from0 = sp.get('from') || '';
+    const to0 = sp.get('to') || '';
+
+    setQ(q0);
+    setSelectedStatuses(statuses0);
+    setSelectedLocationIds(locations0);
+    if (upcoming0 !== null) setUpcomingOnly(upcoming0);
+    setFromDate(from0);
+    setToDate(to0);
+
+    didInitFromUrl.current = true;
+  }, []);
+
+  // If a date-range is set, force upcomingOnly off so the UI matches behavior.
+  useEffect(() => {
+    if (hasExplicitRange && upcomingOnly) setUpcomingOnly(false);
+  }, [hasExplicitRange, upcomingOnly]);
+
+  // Keep URL updated with current filter state
+  useEffect(() => {
+    if (!didInitFromUrl.current) return;
+
+    const sp = new URLSearchParams();
+
+    if (q.trim()) sp.set('q', q.trim());
+    selectedStatuses.forEach((s) => sp.append('status', s));
+    selectedLocationIds.forEach((id) => sp.append('location_id', String(id)));
+
+    if (fromDate) sp.set('from', fromDate);
+    if (toDate) sp.set('to', toDate);
+
+    // Only set upcoming=false explicitly; otherwise omit to keep URLs clean.
+    if (upcomingOnly === false) sp.set('upcoming', 'false');
+
+    const qs = sp.toString();
+    const nextUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, '', nextUrl);
+  }, [q, selectedStatuses, selectedLocationIds, upcomingOnly, fromDate, toDate]);
 
   // Load filter metadata once
   useEffect(() => {
@@ -249,11 +365,75 @@ export default function App() {
             </select>
           </div>
 
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+              From (UTC date)
+            </label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.6rem 0.7rem',
+                borderRadius: 6,
+                border: '1px solid #30363d',
+                background: '#161b22',
+                color: '#e0e0e0',
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+              To (UTC date)
+            </label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.6rem 0.7rem',
+                borderRadius: 6,
+                border: '1px solid #30363d',
+                background: '#161b22',
+                color: '#e0e0e0',
+              }}
+            />
+          </div>
+
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', paddingBottom: '0.2rem' }}>
             <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#c9d1d9' }}>
-              <input type="checkbox" checked={upcomingOnly} onChange={(e) => setUpcomingOnly(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={upcomingOnly}
+                onChange={(e) => setUpcomingOnly(e.target.checked)}
+                disabled={Boolean(fromDate || toDate)}
+              />
               Upcoming only
             </label>
+            <button
+              type="button"
+              onClick={() => {
+                setQ('');
+                setSelectedStatuses([]);
+                setSelectedLocationIds([]);
+                setFromDate('');
+                setToDate('');
+                setUpcomingOnly(true);
+              }}
+              style={{
+                padding: '0.45rem 0.7rem',
+                borderRadius: 6,
+                border: '1px solid #30363d',
+                background: '#0b0e14',
+                color: '#c9d1d9',
+                cursor: 'pointer',
+              }}
+            >
+              Reset
+            </button>
             <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
           </div>
         </div>
@@ -273,6 +453,7 @@ export default function App() {
         </div>
         <div style={{ height: 420 }}>
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
+            <MapFitBounds points={mapPoints} enabled={!loading} />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
