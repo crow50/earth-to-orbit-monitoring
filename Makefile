@@ -87,6 +87,18 @@ migrate-local: ## Run database migrations locally via db-migrate service
 	@echo "Running database migrations..."
 	$(COMPOSE_CMD) run --rm --build db-migrate
 
+# UI evidence (screenshots)
+.PHONY: shot
+shot: ## Capture a screenshot and write it into docs/screenshots/ (requires OpenClaw browser)
+	@if [ -z "$(URL)" ] || [ -z "$(OUT)" ]; then \
+		echo "Usage: make shot URL=https://earthtoorbit.space/ OUT=docs/screenshots/pr-123/before-home.png [PROFILE=openclaw] [FULL_PAGE=1]"; \
+		exit 1; \
+	fi
+	@PROFILE=$${PROFILE:-openclaw}; \
+	FULL=$${FULL_PAGE:-1}; \
+	if [ "$$FULL" = "1" ]; then FULL_FLAG="--full-page"; else FULL_FLAG=""; fi; \
+	scripts/e2o_screenshot.sh --url "$(URL)" --out "$(OUT)" --profile "$$PROFILE" $$FULL_FLAG
+
 # Production workflow helpers
 .PHONY: deploy-prod
 deploy-prod: ## Production deployment workflow (Dry run by default)
