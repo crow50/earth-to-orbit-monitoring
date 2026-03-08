@@ -898,6 +898,18 @@ export default function App() {
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
                 <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
               </div>
+
+              {l.recovery_attempted !== null && l.recovery_attempted !== undefined && (
+                <div style={{ marginTop: 8 }}>
+                  <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Recovery: </span>
+                  <span style={{ color: '#c9d1d9' }}>
+                    {l.recovery_attempted ? (l.recovery_success === true ? 'Successful' : l.recovery_success === false ? 'Failed' : 'Attempted') : 'No attempt'}
+                  </span>
+                  {l.recovery_attempted && !l.recovery_overlay_id && (
+                    <div style={{ color: '#8b949e', fontSize: '0.85rem', marginTop: 2 }}>Location not provided yet</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #30363d', fontSize: '0.85rem', color: '#8b949e' }}>
