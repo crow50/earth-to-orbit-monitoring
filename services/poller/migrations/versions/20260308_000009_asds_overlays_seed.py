@@ -37,14 +37,13 @@ def _upsert_overlay(name: str, overlay_type: str, lon: float, lat: float, props:
                 updated_at = now(),
                 is_active = true
             """
-        ),
-        {
-            "name": name,
-            "overlay_type": overlay_type,
-            "geometry": json.dumps(feature),
-            "properties": json.dumps(props),
-            "source": "manual-seed",
-        },
+        ).bindparams(
+            name=name,
+            overlay_type=overlay_type,
+            geometry=json.dumps(feature),
+            properties=json.dumps(props),
+            source="manual-seed",
+        )
     )
 
 
