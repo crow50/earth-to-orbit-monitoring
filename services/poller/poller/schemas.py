@@ -27,8 +27,9 @@ class LaunchRecord:
 
 @dataclass
 class UserPreferences:
-    id: Optional[int] = None
+    # NOTE: In dataclasses, non-default fields must come before default fields.
     chat_id: str
+    id: Optional[int] = None
     active_hours_start: Optional[str] = "00:00"
     active_hours_end: Optional[str] = "23:59"
     location_subscriptions: List[int] = field(default_factory=list)
