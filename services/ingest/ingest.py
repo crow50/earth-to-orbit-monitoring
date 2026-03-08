@@ -212,6 +212,22 @@ def upsert_recovery_events(conn, launches):
 
             overlay_id = _upsert_overlay_from_landing(cur, landing)
 
+            # If ASDS/landing location has no coordinates, fall back to pre-seeded overlays by name.
+            if overlay_id is None:
+                ll_loc = landing.get("landing_location") or landing.get("location") or {}
+                loc_name = ll_loc.get("name")
+                ltype = landing.get("type") or {}
+                abbrev = (ltype.get("abbrev") or "").upper()
+                overlay_type = "asds" if abbrev == "ASDS" else "landing_zone"
+                if loc_name:
+                    cur.execute(
+                        "SELECT id FROM overlays WHERE overlay_type = %s AND name = %s LIMIT 1",
+                        (overlay_type, loc_name),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        overlay_id = row[0]
+
             method = ((landing.get("type") or {}).get("abbrev") or None)
 
             import json
