@@ -26,6 +26,8 @@ class Launch(BaseModel):
     launch_time: Optional[datetime] = None
     status: Optional[str] = None
     last_updated: Optional[datetime] = None
+    vid_urls: Optional[list[str]] = None
+    webcast_live: Optional[bool] = None
 
     # Normalized geo fields
     location_id: Optional[int] = None
@@ -284,6 +286,8 @@ def _build_launches_query(
             l.net AS launch_time,
             l.status,
             l.last_updated,
+            l.vid_urls,
+            l.webcast_live,
 
             l.location_id,
             loc.name AS location_name,

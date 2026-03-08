@@ -1216,6 +1216,7 @@ export default function App() {
               {/* Watch link */}
               {(() => {
                 const watchUrl =
+                  (Array.isArray(selectedLaunch?.vid_urls) && selectedLaunch.vid_urls.length ? selectedLaunch.vid_urls[0] : null) ||
                   selectedLaunch?.watch_url ||
                   selectedLaunch?.watch_link ||
                   selectedLaunch?.webcast_url ||

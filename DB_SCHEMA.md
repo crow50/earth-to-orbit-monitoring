@@ -12,6 +12,8 @@
 | `pad_id` | integer | Launch Library 2 pad ID (normalized join to `pads`) |
 | `location_id` | integer | Launch Library 2 location ID (join to `locations`) |
 | `last_updated` | timestamp | Last update time from Launch Library 2 |
+| `vid_urls` | json | Video/webcast URLs from Launch Library (array of strings) |
+| `webcast_live` | boolean | Whether the source indicates the webcast is live |
 | `notified_24h` | boolean | Porch alert sent at T-24h |
 | `notified_1h` | boolean | Porch alert sent at T-1h |
 | `notified_15m` | boolean | Porch alert sent at T-15m |
