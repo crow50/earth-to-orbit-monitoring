@@ -93,6 +93,49 @@ function MapFitSelectedEndpoints({ launchPoint, recoveryPoint }) {
   return null;
 }
 
+function MapCloseAndOpenPopups({
+  selectedLaunchId,
+  hasLanding,
+  launchMarkerRefs,
+  landingMarkerRef,
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!selectedLaunchId) return;
+
+    // Close any existing open popups first (prevents “competing cards” from clusters + endpoints).
+    try {
+      map.closePopup();
+    } catch {
+      // ignore
+    }
+
+    const open = () => {
+      try {
+        const m = launchMarkerRefs.current.get(selectedLaunchId);
+        m?.openPopup?.();
+      } catch {
+        // ignore
+      }
+
+      if (hasLanding) {
+        try {
+          landingMarkerRef.current?.openPopup?.();
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    // Defer to ensure markers are mounted.
+    setTimeout(open, 0);
+    setTimeout(open, 50);
+  }, [map, selectedLaunchId, hasLanding, launchMarkerRefs, landingMarkerRef]);
+
+  return null;
+}
+
 function MapSelectionFlyTo({ selectedPoint, enabled = true }) {
   const map = useMap();
 
@@ -324,33 +367,7 @@ export default function App() {
   const launchPopupOffset = hasTwoPopups ? [-14, -8] : [0, 0];
   const landingPopupOffset = hasTwoPopups ? [18, -10] : [0, 0];
 
-  // When a tile is selected, open the corresponding map popups (launch + landing)
-  // to mimic direct marker clicks.
-  useEffect(() => {
-    if (!selectedLaunchId) return;
-
-    const m = launchMarkerRefs.current.get(selectedLaunchId);
-    try {
-      m?.openPopup?.();
-    } catch {
-      // ignore
-    }
-
-    // Landing popup can race render timing (marker ref is set after React-Leaflet mounts).
-    // Retry on the next tick so the landing popup reliably opens when present.
-    if (selectedRecoveryOverlay) {
-      const attemptOpen = () => {
-        try {
-          landingMarkerRef.current?.openPopup?.();
-        } catch {
-          // ignore
-        }
-      };
-      attemptOpen();
-      setTimeout(attemptOpen, 0);
-      setTimeout(attemptOpen, 50);
-    }
-  }, [selectedLaunchId, selectedRecoveryOverlay]);
+  // Popup orchestration moved into MapCloseAndOpenPopups (inside MapContainer)
 
   const recoveryPoint = useMemo(() => {
     if (!selectedRecoveryOverlay) return null;
@@ -805,6 +822,12 @@ export default function App() {
             <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} resetNonce={mapResetNonce} />
             <MapFitSelectedEndpoints launchPoint={selectedLaunchPoint} recoveryPoint={recoveryPoint} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} enabled={!recoveryPoint} />
+            <MapCloseAndOpenPopups
+              selectedLaunchId={selectedLaunchId}
+              hasLanding={Boolean(selectedRecoveryOverlay)}
+              launchMarkerRefs={launchMarkerRefs}
+              landingMarkerRef={landingMarkerRef}
+            />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
