@@ -223,13 +223,13 @@ export default function App() {
   const [q, setQ] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState([]);
   const [selectedLocationIds, setSelectedLocationIds] = useState([]);
-  const [upcomingOnly, setUpcomingOnly] = useState(true);
+  const [upcomingOnly, setUpcomingOnly] = useState(false);
 
   // Applied filter state (drives queries + URL)
   const [aq, setAq] = useState('');
   const [aSelectedStatuses, setASelectedStatuses] = useState([]);
   const [aSelectedLocationIds, setASelectedLocationIds] = useState([]);
-  const [aUpcomingOnly, setAUpcomingOnly] = useState(true);
+  const [aUpcomingOnly, setAUpcomingOnly] = useState(false);
 
   const [selectedLaunchId, setSelectedLaunchId] = useState(null);
 
@@ -238,6 +238,26 @@ export default function App() {
   const [toDate, setToDate] = useState('');
   const [aFromDate, setAFromDate] = useState('');
   const [aToDate, setAToDate] = useState('');
+
+  // Landing defaults (Horizon 2 UX): show a mixed list by default so demos aren't empty.
+  // Window: past 365 days + next 72 hours.
+  const defaultWindow = useMemo(() => {
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const toDateOnlyUtc = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+
+    // Anchor on UTC midnight to keep date-only UI consistent.
+    const now = new Date();
+    const anchor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    const from = new Date(anchor);
+    from.setUTCDate(from.getUTCDate() - 365);
+
+    const to = new Date(anchor);
+    // Date-only UI uses end-of-day when sent to API, so +3 days ~= next 72h.
+    to.setUTCDate(to.getUTCDate() + 3);
+
+    return { from: toDateOnlyUtc(from), to: toDateOnlyUtc(to) };
+  }, []);
 
   const [mapResetNonce, setMapResetNonce] = useState(0);
 
@@ -280,23 +300,40 @@ export default function App() {
     const from0 = sp.get('from') || '';
     const to0 = sp.get('to') || '';
 
+    const hasAnyUrlFilters = Boolean(
+      q0 ||
+        statuses0.length ||
+        locations0.length ||
+        upcoming0 !== null ||
+        from0 ||
+        to0 ||
+        // If the querystring has *any* keys, we assume the user meant it.
+        // (e.g. ?foo=bar from a redirect)
+        Array.from(sp.keys()).length
+    );
+
+    // Default landing view (no URL filters): past 365d + next 72h, upcoming-only OFF.
+    const fromInit = hasAnyUrlFilters ? from0 : defaultWindow.from;
+    const toInit = hasAnyUrlFilters ? to0 : defaultWindow.to;
+    const upcomingInit = hasAnyUrlFilters && upcoming0 !== null ? upcoming0 : false;
+
     setQ(q0);
     setSelectedStatuses(statuses0);
     setSelectedLocationIds(locations0);
-    if (upcoming0 !== null) setUpcomingOnly(upcoming0);
-    setFromDate(from0);
-    setToDate(to0);
+    setUpcomingOnly(upcomingInit);
+    setFromDate(fromInit);
+    setToDate(toInit);
 
-    // Apply immediately from URL deep-link
+    // Apply immediately from URL deep-link (or defaults)
     setAq(q0);
     setASelectedStatuses(statuses0);
     setASelectedLocationIds(locations0);
-    if (upcoming0 !== null) setAUpcomingOnly(upcoming0);
-    setAFromDate(from0);
-    setAToDate(to0);
+    setAUpcomingOnly(upcomingInit);
+    setAFromDate(fromInit);
+    setAToDate(toInit);
 
     didInitFromUrl.current = true;
-  }, []);
+  }, [defaultWindow.from, defaultWindow.to]);
 
   // If a date-range is set, force upcomingOnly off so the UI matches behavior.
   useEffect(() => {
@@ -404,20 +441,49 @@ export default function App() {
     };
   }, [queryParams]);
 
+  const padCoordById = useMemo(() => {
+    const m = new Map();
+    for (const p of meta.pads || []) {
+      if (p && typeof p.id === 'number' && typeof p.latitude === 'number' && typeof p.longitude === 'number') {
+        m.set(p.id, { lat: p.latitude, lon: p.longitude, name: p.name });
+      }
+    }
+    return m;
+  }, [meta.pads]);
+
   const mapPoints = useMemo(() => {
     return launches
-      .filter((l) => typeof l.pad_latitude === 'number' && typeof l.pad_longitude === 'number')
-      .map((l) => ({
-        id: l.id,
-        mission_name: l.mission_name,
-        status: l.status,
-        launch_time: l.launch_time,
-        pad_name: l.pad_name || l.legacy_pad,
-        location_name: l.location_name,
-        lat: l.pad_latitude,
-        lon: l.pad_longitude,
-      }));
-  }, [launches]);
+      .map((l) => {
+        let lat = typeof l.pad_latitude === 'number' ? l.pad_latitude : null;
+        let lon = typeof l.pad_longitude === 'number' ? l.pad_longitude : null;
+
+        // Fallback 1: pad_id → meta.pads
+        if ((lat === null || lon === null) && typeof l.pad_id === 'number') {
+          const c = padCoordById.get(l.pad_id);
+          if (c) {
+            lat = c.lat;
+            lon = c.lon;
+          }
+        }
+
+        if (lat === null || lon === null) return null;
+
+        return {
+          id: l.id,
+          mission_name: l.mission_name,
+          status: l.status,
+          launch_time: l.launch_time,
+          pad_name: l.pad_name || l.legacy_pad,
+          location_name: l.location_name,
+          lat,
+          lon,
+        };
+      })
+      .filter(Boolean);
+  }, [launches, padCoordById]);
+
+  const mappedCount = mapPoints.length;
+  const totalCount = launches.length;
 
   const mapPointGroups = useMemo(() => {
     // Group by near-identical coordinates to avoid indistinguishable stacks.
@@ -691,20 +757,21 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
+                // Reset to the default landing view (mixed list): past 365d + next 72h.
                 setQ('');
                 setSelectedStatuses([]);
                 setSelectedLocationIds([]);
-                setFromDate('');
-                setToDate('');
-                setUpcomingOnly(true);
+                setFromDate(defaultWindow.from);
+                setToDate(defaultWindow.to);
+                setUpcomingOnly(false);
 
                 // Reset applied filters too
                 setAq('');
                 setASelectedStatuses([]);
                 setASelectedLocationIds([]);
-                setAFromDate('');
-                setAToDate('');
-                setAUpcomingOnly(true);
+                setAFromDate(defaultWindow.from);
+                setAToDate(defaultWindow.to);
+                setAUpcomingOnly(false);
 
                 setSelectedLaunchId(null);
                 setMapResetNonce((n) => n + 1);
@@ -756,8 +823,14 @@ export default function App() {
           zIndex: 10,
         }}
       >
-        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
-          Map (OpenStreetMap)
+        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <span>Map (OpenStreetMap)</span>
+          <span style={{ fontSize: '0.8rem', color: '#8b949e' }}>
+            Mapped: <span style={{ color: '#c9d1d9', fontWeight: 'bold' }}>{mappedCount}</span> / {totalCount}
+            {totalCount > mappedCount ? (
+              <span style={{ marginLeft: 8 }}>(missing coords: {totalCount - mappedCount})</span>
+            ) : null}
+          </span>
         </div>
         <div style={{ height: mapHeight, position: 'relative' }}>
           {shouldShowLandingZones && (
@@ -1107,8 +1180,93 @@ export default function App() {
         ))}
 
         {!loading && launches.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
-            No results. Try widening filters.
+          <div style={{ textAlign: 'center', padding: '3.5rem 2rem', color: '#8b949e' }}>
+            <div style={{ fontSize: '1.05rem', color: '#c9d1d9', marginBottom: '0.5rem' }}>No launches match these filters.</div>
+            <div style={{ marginBottom: '1.25rem' }}>Try one of these quick options:</div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  // Default window: past 365d + next 72h (upcoming-only OFF)
+                  setFromDate(defaultWindow.from);
+                  setToDate(defaultWindow.to);
+                  setUpcomingOnly(false);
+
+                  setAFromDate(defaultWindow.from);
+                  setAToDate(defaultWindow.to);
+                  setAUpcomingOnly(false);
+
+                  setSelectedLaunchId(null);
+                  setMapResetNonce((n) => n + 1);
+                }}
+                style={{
+                  padding: '0.5rem 0.8rem',
+                  borderRadius: 6,
+                  border: '1px solid #58a6ff',
+                  background: 'rgba(88, 166, 255, 0.1)',
+                  color: '#58a6ff',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                }}
+              >
+                Show last 365d + next 72h
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // Upcoming-only view (clear explicit range)
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(true);
+
+                  setAFromDate('');
+                  setAToDate('');
+                  setAUpcomingOnly(true);
+
+                  setSelectedLaunchId(null);
+                  setMapResetNonce((n) => n + 1);
+                }}
+                style={{
+                  padding: '0.5rem 0.8rem',
+                  borderRadius: 6,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Upcoming only
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // Broadest view: clear dates + upcoming; keep other filters as-is.
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(false);
+
+                  setAFromDate('');
+                  setAToDate('');
+                  setAUpcomingOnly(false);
+
+                  setSelectedLaunchId(null);
+                  setMapResetNonce((n) => n + 1);
+                }}
+                style={{
+                  padding: '0.5rem 0.8rem',
+                  borderRadius: 6,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Clear date window
+              </button>
+            </div>
           </div>
         )}
 
