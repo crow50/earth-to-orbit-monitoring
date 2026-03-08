@@ -41,6 +41,8 @@ class Launch(BaseModel):
     recovery_attempted: Optional[bool] = None
     recovery_success: Optional[bool] = None
     recovery_overlay_id: Optional[int] = None
+    recovery_method: Optional[str] = None
+    recovery_provider: Optional[str] = None
 
     # Backward-compat
     # (previously overloaded `location_name` with pad string)
@@ -295,6 +297,8 @@ def _build_launches_query(
             r.attempted AS recovery_attempted,
             r.success AS recovery_success,
             r.overlay_id AS recovery_overlay_id,
+            r.method AS recovery_method,
+            r.provider AS recovery_provider,
 
             l.pad AS legacy_pad
         FROM launches l
@@ -410,6 +414,8 @@ def get_launch(launch_id: str):
                     r.attempted AS recovery_attempted,
                     r.success AS recovery_success,
                     r.overlay_id AS recovery_overlay_id,
+                    r.method AS recovery_method,
+                    r.provider AS recovery_provider,
 
                     l.pad AS legacy_pad
                 FROM launches l
