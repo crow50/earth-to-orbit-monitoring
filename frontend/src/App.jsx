@@ -750,13 +750,25 @@ export default function App() {
                     width: 12,
                     height: 12,
                     borderRadius: 999,
-                    border: '2px dashed #ff9800',
-                    background: 'rgba(255,152,0,0.35)',
+                    border: '2px solid #2f81f7',
+                    background: 'rgba(47,129,247,0.55)',
                   }}
                 />
-                <span>Landing Zone</span>
+                <span>Launch Pad</span>
               </div>
-              <div style={{ marginTop: 4, color: '#8b949e' }}>Launch pads use default pin markers.</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 12,
+                    height: 12,
+                    borderRadius: 999,
+                    border: '2px dashed #ff9800',
+                    background: 'rgba(255,152,0,0.40)',
+                  }}
+                />
+                <span>Landing Site (LZ/ASDS)</span>
+              </div>
             </div>
           )}
 
@@ -783,29 +795,38 @@ export default function App() {
                     <CircleMarker
                       key={`lz-${o.id}`}
                       center={[lat, lon]}
-                      radius={9}
+                      radius={11}
                       pathOptions={{
                         color: '#ff9800',
-                        weight: 3,
+                        weight: 4,
                         fillColor: '#ff9800',
-                        fillOpacity: 0.35,
+                        fillOpacity: 0.5,
                         dashArray: '4 4',
                       }}
                       ref={landingMarkerRef}
                     >
-                      <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-                        Landing Zone: {o.name}
+                      <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
+                        Landing Site: {o.name}
                       </Tooltip>
-                      <Popup offset={landingPopupOffset} maxWidth={260} minWidth={180}>
-                        <div style={{ maxWidth: 260 }}>
-                          <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Landing Zone</div>
+                      <Popup offset={landingPopupOffset} maxWidth={300} minWidth={200}>
+                        <div style={{ maxWidth: 300 }}>
+                          <div style={{ fontWeight: 'bold', marginBottom: 6 }}>Landing Site</div>
                           <div style={{ color: '#fff', marginBottom: 6 }}>{o.name}</div>
                           <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
-                            {o.properties?.site ? `Site: ${o.properties.site}` : ''}
+                            Type: {o.overlay_type === 'asds' ? 'ASDS (drone ship)' : 'Landing Zone'}
                           </div>
-                          <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
-                            {o.properties?.operator ? `Operator: ${o.properties.operator}` : ''}
-                          </div>
+                          {o.properties?.abbrev && (
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Abbrev: {o.properties.abbrev}</div>
+                          )}
+                          {o.properties?.ocean && (
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Ocean: {o.properties.ocean}</div>
+                          )}
+                          {o.properties?.site && (
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Site: {o.properties.site}</div>
+                          )}
+                          {o.properties?.operator && (
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Operator: {o.properties.operator}</div>
+                          )}
                         </div>
                       </Popup>
                     </CircleMarker>
@@ -837,9 +858,9 @@ export default function App() {
                     radius={7}
                     pathOptions={{
                       color: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      weight: p.id === selectedLaunchId ? 3 : 2,
+                      weight: p.id === selectedLaunchId ? 3 : selectedLaunchId ? 1 : 2,
                       fillColor: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      fillOpacity: 0.55,
+                      fillOpacity: selectedLaunchId && p.id !== selectedLaunchId ? 0.15 : 0.55,
                     }}
                     eventHandlers={{
                       click: () => setSelectedLaunchId(p.id),
