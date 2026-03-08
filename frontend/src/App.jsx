@@ -93,15 +93,16 @@ function MapFitSelectedEndpoints({ launchPoint, recoveryPoint }) {
   return null;
 }
 
-function MapSelectionFlyTo({ selectedPoint }) {
+function MapSelectionFlyTo({ selectedPoint, enabled = true }) {
   const map = useMap();
 
   useEffect(() => {
+    if (!enabled) return;
     if (!selectedPoint) return;
     map.flyTo([selectedPoint.lat, selectedPoint.lon], Math.max(map.getZoom(), 6), {
       duration: 0.8,
     });
-  }, [map, selectedPoint]);
+  }, [map, selectedPoint, enabled]);
 
   return null;
 }
@@ -428,6 +429,7 @@ export default function App() {
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
 
   const [mapHeight, setMapHeight] = useState(380);
+  const [lineDashOffset, setLineDashOffset] = useState(0);
 
   useEffect(() => {
     const compute = () => {
@@ -446,6 +448,13 @@ export default function App() {
       window.removeEventListener('orientationchange', apply);
     };
   }, []);
+
+  // Subtle dash animation for mission leg (only when endpoints are present)
+  useEffect(() => {
+    if (!selectedLaunchPoint || !recoveryPoint) return;
+    const id = setInterval(() => setLineDashOffset((v) => (v + 1) % 200), 80);
+    return () => clearInterval(id);
+  }, [selectedLaunchPoint, recoveryPoint]);
 
   return (
     <div
@@ -775,7 +784,7 @@ export default function App() {
           <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
             <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} resetNonce={mapResetNonce} />
             <MapFitSelectedEndpoints launchPoint={selectedLaunchPoint} recoveryPoint={recoveryPoint} />
-            <MapSelectionFlyTo selectedPoint={selectedPoint} />
+            <MapSelectionFlyTo selectedPoint={selectedPoint} enabled={!recoveryPoint} />
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -836,14 +845,24 @@ export default function App() {
             )}
 
             {/* Selected endpoints line (pad → recovery) */}
-            {selectedLaunchPoint && recoveryPoint && (
+            {selectedLaunchPoint && recoveryPoint && selectedLaunch && (
               <Polyline
                 positions={[
                   [selectedLaunchPoint.lat, selectedLaunchPoint.lon],
                   [recoveryPoint.lat, recoveryPoint.lon],
                 ]}
-                pathOptions={{ color: '#ff9800', weight: 3, opacity: 0.8, dashArray: '6 6' }}
-              />
+                pathOptions={{
+                  color: '#ff9800',
+                  weight: 3,
+                  opacity: 0.9,
+                  dashArray: '6 6',
+                  dashOffset: String(lineDashOffset),
+                }}
+              >
+                <Tooltip sticky opacity={0.95}>
+                  {selectedLaunch.recovery_method || (selectedRecoveryOverlay?.overlay_type === 'asds' ? 'ASDS' : 'RTLS')}
+                </Tooltip>
+              </Polyline>
             )}
 
             {mapPointGroups.map((g) => {
@@ -860,7 +879,7 @@ export default function App() {
                       color: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
                       weight: p.id === selectedLaunchId ? 3 : selectedLaunchId ? 1 : 2,
                       fillColor: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      fillOpacity: selectedLaunchId && p.id !== selectedLaunchId ? 0.15 : 0.55,
+                      fillOpacity: selectedLaunchId && p.id !== selectedLaunchId ? 0.06 : 0.60,
                     }}
                     eventHandlers={{
                       click: () => setSelectedLaunchId(p.id),
@@ -870,7 +889,7 @@ export default function App() {
                     }}
                   >
                     <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
-                      Launch Pad: {p.pad_name || 'Unknown'}
+                      Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
                     </Tooltip>
                     <Popup offset={launchPopupOffset} maxWidth={300} minWidth={200}>
                       <div style={{ maxWidth: 280 }}>
@@ -890,7 +909,9 @@ export default function App() {
                             {p.status || 'Unknown'}
                           </span>
                         </div>
-                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Launch Pad: {p.pad_name || ''}</div>
+                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
+                          Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
+                        </div>
                         <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
                         <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
                           {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
@@ -1021,6 +1042,13 @@ export default function App() {
                   </span>
                   {l.recovery_attempted && !l.recovery_overlay_id && (
                     <div style={{ color: '#8b949e', fontSize: '0.85rem', marginTop: 2 }}>Location not provided yet</div>
+                  )}
+                  {(l.recovery_method || l.recovery_provider) && (
+                    <div style={{ marginTop: 4, color: '#8b949e', fontSize: '0.85rem' }}>
+                      {l.recovery_method ? `Method: ${l.recovery_method}` : ''}
+                      {l.recovery_method && l.recovery_provider ? ' · ' : ''}
+                      {l.recovery_provider ? `Source: ${l.recovery_provider}` : ''}
+                    </div>
                   )}
                 </div>
               )}
