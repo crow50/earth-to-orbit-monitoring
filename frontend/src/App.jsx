@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { CircleMarker, GeoJSON, MapContainer, Marker, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -802,10 +802,28 @@ export default function App() {
               </>
             )}
 
+            {/* Selected endpoints line (pad → recovery) */}
+            {selectedLaunchPoint && recoveryPoint && (
+              <Polyline
+                positions={[
+                  [selectedLaunchPoint.lat, selectedLaunchPoint.lon],
+                  [recoveryPoint.lat, recoveryPoint.lon],
+                ]}
+                pathOptions={{ color: '#ff9800', weight: 3, opacity: 0.8, dashArray: '6 6' }}
+              />
+            )}
+
             {mapPoints.map((p) => (
-              <Marker
+              <CircleMarker
                 key={p.id}
-                position={[p.lat, p.lon]}
+                center={[p.lat, p.lon]}
+                radius={7}
+                pathOptions={{
+                  color: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
+                  weight: p.id === selectedLaunchId ? 3 : 2,
+                  fillColor: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
+                  fillOpacity: 0.55,
+                }}
                 eventHandlers={{
                   click: () => setSelectedLaunchId(p.id),
                 }}
@@ -813,6 +831,9 @@ export default function App() {
                   if (ref) launchMarkerRefs.current.set(p.id, ref);
                 }}
               >
+                <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
+                  Launch Pad: {p.pad_name || 'Unknown'}
+                </Tooltip>
                 <Popup offset={launchPopupOffset} maxWidth={300} minWidth={200}>
                   <div style={{ maxWidth: 280 }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
@@ -831,14 +852,14 @@ export default function App() {
                         {p.status || 'Unknown'}
                       </span>
                     </div>
-                    <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.pad_name || ''}</div>
+                    <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Launch Pad: {p.pad_name || ''}</div>
                     <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
                     <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
                       {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
                     </div>
                   </div>
                 </Popup>
-              </Marker>
+              </CircleMarker>
             ))}
           </MapContainer>
         </div>
