@@ -1,6 +1,6 @@
 """seed ASDS overlays (SpaceX drone ships)
 
-Revision ID: 20260308_000009_asds_overlays_seed
+Revision ID: 20260308_000009_asds
 Revises: 20260307_000008_ovluniq
 Create Date: 2026-03-08
 
@@ -13,7 +13,7 @@ import json
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260308_000009_asds_overlays_seed"
+revision = "20260308_000009_asds"
 down_revision = "20260307_000008_ovluniq"
 branch_labels = None
 depends_on = None
@@ -79,4 +79,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM overlays WHERE overlay_type = 'asds' AND name IN ('Just Read the Instructions', 'Of Course I Still Love You', 'A Shortfall of Gravitas')")
+    op.execute(
+        "DELETE FROM overlays WHERE overlay_type = 'asds' AND name IN ('Just Read the Instructions', 'Of Course I Still Love You', 'A Shortfall of Gravitas')"
+    )
