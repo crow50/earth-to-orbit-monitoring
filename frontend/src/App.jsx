@@ -441,20 +441,49 @@ export default function App() {
     };
   }, [queryParams]);
 
+  const padCoordById = useMemo(() => {
+    const m = new Map();
+    for (const p of meta.pads || []) {
+      if (p && typeof p.id === 'number' && typeof p.latitude === 'number' && typeof p.longitude === 'number') {
+        m.set(p.id, { lat: p.latitude, lon: p.longitude, name: p.name });
+      }
+    }
+    return m;
+  }, [meta.pads]);
+
   const mapPoints = useMemo(() => {
     return launches
-      .filter((l) => typeof l.pad_latitude === 'number' && typeof l.pad_longitude === 'number')
-      .map((l) => ({
-        id: l.id,
-        mission_name: l.mission_name,
-        status: l.status,
-        launch_time: l.launch_time,
-        pad_name: l.pad_name || l.legacy_pad,
-        location_name: l.location_name,
-        lat: l.pad_latitude,
-        lon: l.pad_longitude,
-      }));
-  }, [launches]);
+      .map((l) => {
+        let lat = typeof l.pad_latitude === 'number' ? l.pad_latitude : null;
+        let lon = typeof l.pad_longitude === 'number' ? l.pad_longitude : null;
+
+        // Fallback 1: pad_id → meta.pads
+        if ((lat === null || lon === null) && typeof l.pad_id === 'number') {
+          const c = padCoordById.get(l.pad_id);
+          if (c) {
+            lat = c.lat;
+            lon = c.lon;
+          }
+        }
+
+        if (lat === null || lon === null) return null;
+
+        return {
+          id: l.id,
+          mission_name: l.mission_name,
+          status: l.status,
+          launch_time: l.launch_time,
+          pad_name: l.pad_name || l.legacy_pad,
+          location_name: l.location_name,
+          lat,
+          lon,
+        };
+      })
+      .filter(Boolean);
+  }, [launches, padCoordById]);
+
+  const mappedCount = mapPoints.length;
+  const totalCount = launches.length;
 
   const mapPointGroups = useMemo(() => {
     // Group by near-identical coordinates to avoid indistinguishable stacks.
@@ -794,8 +823,14 @@ export default function App() {
           zIndex: 10,
         }}
       >
-        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e' }}>
-          Map (OpenStreetMap)
+        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <span>Map (OpenStreetMap)</span>
+          <span style={{ fontSize: '0.8rem', color: '#8b949e' }}>
+            Mapped: <span style={{ color: '#c9d1d9', fontWeight: 'bold' }}>{mappedCount}</span> / {totalCount}
+            {totalCount > mappedCount ? (
+              <span style={{ marginLeft: 8 }}>(missing coords: {totalCount - mappedCount})</span>
+            ) : null}
+          </span>
         </div>
         <div style={{ height: mapHeight, position: 'relative' }}>
           {shouldShowLandingZones && (
