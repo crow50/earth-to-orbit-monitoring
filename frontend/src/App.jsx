@@ -806,6 +806,9 @@ export default function App() {
               <Marker
                 key={p.id}
                 position={[p.lat, p.lon]}
+                eventHandlers={{
+                  click: () => setSelectedLaunchId(p.id),
+                }}
                 ref={(ref) => {
                   if (ref) launchMarkerRefs.current.set(p.id, ref);
                 }}
