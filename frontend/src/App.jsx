@@ -322,7 +322,7 @@ export default function App() {
 
   const hasTwoPopups = Boolean(selectedLaunchId && selectedRecoveryOverlay);
   const launchPopupOffset = hasTwoPopups ? [-14, -8] : [0, 0];
-  const landingPopupOffset = hasTwoPopups ? [14, -8] : [0, 0];
+  const landingPopupOffset = hasTwoPopups ? [18, -10] : [0, 0];
 
   // When a tile is selected, open the corresponding map popups (launch + landing)
   // to mimic direct marker clicks.
@@ -336,11 +336,19 @@ export default function App() {
       // ignore
     }
 
-    // If we have a known landing marker, open it too.
-    try {
-      landingMarkerRef.current?.openPopup?.();
-    } catch {
-      // ignore
+    // Landing popup can race render timing (marker ref is set after React-Leaflet mounts).
+    // Retry on the next tick so the landing popup reliably opens when present.
+    if (selectedRecoveryOverlay) {
+      const attemptOpen = () => {
+        try {
+          landingMarkerRef.current?.openPopup?.();
+        } catch {
+          // ignore
+        }
+      };
+      attemptOpen();
+      setTimeout(attemptOpen, 0);
+      setTimeout(attemptOpen, 50);
     }
   }, [selectedLaunchId, selectedRecoveryOverlay]);
 
@@ -778,6 +786,18 @@ export default function App() {
                 />
                 <span>Landing Site (LZ/ASDS)</span>
               </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 16,
+                    height: 0,
+                    borderTop: '3px dashed #ff9800',
+                    opacity: 0.9,
+                  }}
+                />
+                <span>Mission leg (pad → landing)</span>
+              </div>
             </div>
           )}
 
@@ -835,6 +855,9 @@ export default function App() {
                           )}
                           {o.properties?.operator && (
                             <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Operator: {o.properties.operator}</div>
+                          )}
+                          {!o.properties?.abbrev && !o.properties?.ocean && !o.properties?.site && !o.properties?.operator && (
+                            <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>Details not provided yet</div>
                           )}
                         </div>
                       </Popup>
