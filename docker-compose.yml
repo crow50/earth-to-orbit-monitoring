@@ -14,23 +14,25 @@ services:
     build: ./services/api
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
-    ports:
-      - "8000:8000"
     depends_on:
       - db
     networks:
       - rlnet
-      - oc-mesh
 
   frontend:
-    build: ./frontend
-    ports:
-      - "3000:80"
+    build:
+      context: ./frontend
+      args:
+        # Build-time base path so the app can live under /e2o/ behind the IDX gateway.
+        # Override if you want to run it at the root path.
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/e2o/}
     depends_on:
       - api
     networks:
-      - rlnet
-      - oc-mesh
+      rlnet: {}
+      oc-mesh:
+        aliases:
+          - e2o-frontend
 
   ingest:
     build: ./services/ingest

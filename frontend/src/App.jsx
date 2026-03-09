@@ -390,25 +390,29 @@ export default function App() {
     window.history.replaceState(null, '', nextUrl);
   }, [aq, aSelectedStatuses, aSelectedLocationIds, aUpcomingOnly, aFromDate, aToDate]);
 
+  // Use Vite's BASE_URL so the app can be hosted under a sub-path (e.g. /e2o/)
+  // without hard-coding absolute /api URLs.
+  const api = useMemo(() => axios.create({ baseURL: import.meta.env.BASE_URL }), []);
+
   // Load filter metadata once
   useEffect(() => {
-    axios
-      .get('/api/v1/meta/filters')
+    api
+      .get('api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
-  }, []);
+  }, [api]);
 
   // Load overlays (Horizon 2) once
   useEffect(() => {
     // Pull all overlay types so recovery can reference ASDS as well.
-    axios
-      .get('/api/v1/overlays', { params: { is_active: true } })
+    api
+      .get('api/v1/overlays', { params: { is_active: true } })
       .then((r) => setOverlays(r.data || []))
       .catch((e) => {
         console.error(e);
         setOverlays([]);
       });
-  }, []);
+  }, [api]);
 
   const selectedLaunch = useMemo(() => {
     if (!selectedLaunchId) return null;
@@ -445,8 +449,8 @@ export default function App() {
 
     const fetchData = () => {
       setLoading(true);
-      axios
-        .get('/api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
+      api
+        .get('api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
         .then((r) => {
           if (!cancelled) setLaunches(r.data);
         })
