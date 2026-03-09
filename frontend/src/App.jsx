@@ -1167,6 +1167,11 @@ export default function App() {
                   <div style={{ marginTop: 6, fontSize: '1.15rem', fontWeight: 'bold', color: '#fff' }}>
                     {selectedLaunch?.mission_name || 'Unknown mission'}
                   </div>
+                  {selectedLaunch?.rocket_name && (
+                    <div style={{ marginTop: 4, fontSize: '0.9rem', color: '#58a6ff', fontStyle: 'italic' }}>
+                      {selectedLaunch.rocket_name}
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -1367,13 +1372,19 @@ export default function App() {
                 {l.mission_name || 'Unknown Mission'}
               </h2>
 
+              {l.rocket_name && (
+                <div style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: 8, fontStyle: 'italic' }}>
+                  {l.rocket_name}
+                </div>
+              )}
+
               <div style={{ marginBottom: 6 }}>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
                 <span style={{ color: '#c9d1d9' }}>{l.pad_name || l.legacy_pad || 'TBD'}</span>
               </div>
               <div>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
-                <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
+                <span style={{ color: '#c9d1d9' }}>{l.location_name || l.pad_location_name || 'TBD'}</span>
               </div>
 
               {l.recovery_attempted !== null && l.recovery_attempted !== undefined && (

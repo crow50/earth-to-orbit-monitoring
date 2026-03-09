@@ -20,6 +20,7 @@ services:
       - db
     networks:
       - rlnet
+      - oc-mesh
 
   frontend:
     build: ./frontend
@@ -29,6 +30,7 @@ services:
       - api
     networks:
       - rlnet
+      - oc-mesh
 
   ingest:
     build: ./services/ingest
@@ -66,3 +68,5 @@ volumes:
 networks:
   rlnet:
     driver: bridge
+  oc-mesh:
+    external: true

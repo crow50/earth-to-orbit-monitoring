@@ -29,6 +29,12 @@ class Launch(BaseModel):
     vid_urls: Optional[list[str]] = None
     webcast_live: Optional[bool] = None
 
+    # New detail fields
+    rocket_name: Optional[str] = None
+    mission_description: Optional[str] = None
+    mission_type: Optional[str] = None
+    pad_location_name: Optional[str] = None
+
     # Normalized geo fields
     location_id: Optional[int] = None
     location_name: Optional[str] = None
@@ -288,6 +294,10 @@ def _build_launches_query(
             l.last_updated,
             l.vid_urls,
             l.webcast_live,
+            l.rocket_name,
+            l.mission_description,
+            l.mission_type,
+            l.pad_location_name,
 
             l.location_id,
             loc.name AS location_name,
