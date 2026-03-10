@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 
 // Create an axios instance with the Vite base path so API calls work behind
@@ -93,7 +93,8 @@ function MapFitBounds({ points, enabled, resetNonce }) {
     // NOTE: This trades some bounds completeness for UX. User can still zoom out manually.
     try {
       const z = map.getZoom();
-      if (z < 3) map.setZoom(3);
+      // Keep the view from being *extremely* zoomed out, but avoid forcing a tight zoom.
+      if (z < 2.2) map.setZoom(2.2);
     } catch {
       // ignore
     }
@@ -584,36 +585,6 @@ export default function App() {
   const [mapHeight, setMapHeight] = useState(380);
   const [lineDashOffset, setLineDashOffset] = useState(0);
 
-  // Measure sticky filter bar height so the sticky map can sit *directly* under it.
-  // Otherwise, when the filter bar collapses, the map's hardcoded `top` leaves a gap
-  // where content can scroll underneath.
-  const filterBarRef = useRef(null);
-  const [filterBarHeight, setFilterBarHeight] = useState(0);
-
-  useLayoutEffect(() => {
-    const el = filterBarRef.current;
-    if (!el) return undefined;
-
-    const measure = () => {
-      try {
-        setFilterBarHeight(Math.ceil(el.getBoundingClientRect().height));
-      } catch {
-        // ignore
-      }
-    };
-
-    measure();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
-    }
-
-    const ro = new ResizeObserver(() => measure());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   useEffect(() => {
     const compute = () => {
       const isMobile = window.innerWidth <= 768;
@@ -666,7 +637,6 @@ export default function App() {
 
       {/* Sticky filter bar (stays above map when scrolling) */}
       <section
-        ref={filterBarRef}
         style={{
           position: 'sticky',
           top: 0,
@@ -922,9 +892,9 @@ export default function App() {
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: '1.5rem',
-          position: 'sticky',
-          top: filterBarHeight ? `${filterBarHeight}px` : '5.75rem',
-          zIndex: 15,
+          // Non-sticky for a seamless, unified scroll experience (no overlap/bleed).
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
@@ -995,7 +965,7 @@ export default function App() {
             </div>
           )}
 
-          <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%', background: '#161b22' }}>
             <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} resetNonce={mapResetNonce} />
             <MapFitSelectedEndpoints launchPoint={selectedLaunchPoint} recoveryPoint={recoveryPoint} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} enabled={!recoveryPoint} />
