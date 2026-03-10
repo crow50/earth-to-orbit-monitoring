@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 
-// Use Vite base path so API calls work behind reverse-proxy prefixes (e.g. /e2o/)
-axios.defaults.baseURL = import.meta.env.BASE_URL;
+// Create an axios instance with the Vite base path so API calls work behind
+// reverse-proxy prefixes (e.g. /e2o/).  Paths must be relative (no leading /)
+// so axios actually prepends the baseURL.
+const api = axios.create({ baseURL: import.meta.env.BASE_URL });
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -395,8 +397,8 @@ export default function App() {
 
   // Load filter metadata once
   useEffect(() => {
-    axios
-      .get('/api/v1/meta/filters')
+    api
+      .get('api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
   }, []);
@@ -404,8 +406,8 @@ export default function App() {
   // Load overlays (Horizon 2) once
   useEffect(() => {
     // Pull all overlay types so recovery can reference ASDS as well.
-    axios
-      .get('/api/v1/overlays', { params: { is_active: true } })
+    api
+      .get('api/v1/overlays', { params: { is_active: true } })
       .then((r) => setOverlays(r.data || []))
       .catch((e) => {
         console.error(e);
@@ -448,8 +450,8 @@ export default function App() {
 
     const fetchData = () => {
       setLoading(true);
-      axios
-        .get('/api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
+      api
+        .get('api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
         .then((r) => {
           if (!cancelled) setLaunches(r.data);
         })
