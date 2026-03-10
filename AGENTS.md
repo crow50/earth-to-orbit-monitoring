@@ -52,3 +52,9 @@ Contact
 - Maintainers: see CONTRIBUTORS.md (if present). For urgent infra CI issues, contact the on-call in README or the repo's issue tracker.
 
 Keep it practical. If something in this document is unclear or missing, update AGENTS.md with specifics so the next agent has fewer questions.
+
+## UX Decisions (2026-03-09)
+- **Default Landing Filters:** To ensure a non-empty view, the default dashboard experience MUST fetch a mixed list: 365 days back and 72 hours forward from `now()`.
+- **Mission Detail Restoration:** Mission tiles and the detail drawer MUST display the \`rocket_name\` and \`mission_description\` fields to provide operational context.
+- **Location Fallback:** If \`location_id\` is null (join failure), the UI MUST fall back to the denormalized \`pad_location_name\` field instead of showing "TBD".
+- **Watch CTA:** The "Watch" button should prioritize LaunchLibrary \`vid_urls\` array over legacy link fields.

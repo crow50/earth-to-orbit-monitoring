@@ -150,6 +150,25 @@ function MapSelectionFlyTo({ selectedPoint, enabled = true }) {
   return null;
 }
 
+function formatTimeAgo(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const seconds = Math.round((Date.now() - d.getTime()) / 1000);
+  const abs = Math.abs(seconds);
+
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+  if (abs < 60) return `Updated ${rtf.format(-seconds, 'second')}`;
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 60) return `Updated ${rtf.format(-minutes, 'minute')}`;
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return `Updated ${rtf.format(-hours, 'hour')}`;
+  const days = Math.round(hours / 24);
+  return `Updated ${rtf.format(-days, 'day')}`;
+}
+
 function Countdown({ targetDate }) {
   const [state, setState] = useState(null);
 
@@ -300,6 +319,9 @@ export default function App() {
     const from0 = sp.get('from') || '';
     const to0 = sp.get('to') || '';
 
+    // Optional: deep-link to a selected launch (useful for screenshots and sharing)
+    const selected0 = sp.get('selected_launch_id') || sp.get('launch_id') || sp.get('selected') || '';
+
     const hasAnyUrlFilters = Boolean(
       q0 ||
         statuses0.length ||
@@ -331,6 +353,8 @@ export default function App() {
     setAUpcomingOnly(upcomingInit);
     setAFromDate(fromInit);
     setAToDate(toInit);
+
+    if (selected0) setSelectedLaunchId(selected0);
 
     didInitFromUrl.current = true;
   }, [defaultWindow.from, defaultWindow.to]);
@@ -366,25 +390,29 @@ export default function App() {
     window.history.replaceState(null, '', nextUrl);
   }, [aq, aSelectedStatuses, aSelectedLocationIds, aUpcomingOnly, aFromDate, aToDate]);
 
+  // Use Vite's BASE_URL so the app can be hosted under a sub-path (e.g. /e2o/)
+  // without hard-coding absolute /api URLs.
+  const api = useMemo(() => axios.create({ baseURL: import.meta.env.BASE_URL }), []);
+
   // Load filter metadata once
   useEffect(() => {
-    axios
-      .get('/api/v1/meta/filters')
+    api
+      .get('api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
-  }, []);
+  }, [api]);
 
   // Load overlays (Horizon 2) once
   useEffect(() => {
     // Pull all overlay types so recovery can reference ASDS as well.
-    axios
-      .get('/api/v1/overlays', { params: { is_active: true } })
+    api
+      .get('api/v1/overlays', { params: { is_active: true } })
       .then((r) => setOverlays(r.data || []))
       .catch((e) => {
         console.error(e);
         setOverlays([]);
       });
-  }, []);
+  }, [api]);
 
   const selectedLaunch = useMemo(() => {
     if (!selectedLaunchId) return null;
@@ -421,8 +449,8 @@ export default function App() {
 
     const fetchData = () => {
       setLoading(true);
-      axios
-        .get('/api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
+      api
+        .get('api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
         .then((r) => {
           if (!cancelled) setLaunches(r.data);
         })
@@ -1095,6 +1123,210 @@ export default function App() {
         </div>
       </section>
 
+
+      {/* Mission drilldown drawer (Horizon 2) */}
+      {selectedLaunchId && (
+        <>
+          {/* Backdrop for small screens */}
+          {window.innerWidth <= 900 && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setSelectedLaunchId(null)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') setSelectedLaunchId(null);
+              }}
+              aria-label="Close mission details"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 50,
+                background: 'rgba(0,0,0,0.55)',
+              }}
+            />
+          )}
+
+          <aside
+            aria-label="Mission details"
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              height: '100vh',
+              width: 'min(420px, 92vw)',
+              zIndex: 60,
+              background: '#0b0e14',
+              borderLeft: '1px solid #30363d',
+              boxShadow: '-10px 0 30px rgba(0,0,0,0.55)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{ padding: '1.1rem 1.1rem 0.9rem', borderBottom: '1px solid #30363d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', letterSpacing: '0.12em', color: '#8b949e', textTransform: 'uppercase' }}>
+                    Mission Details
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: '1.15rem', fontWeight: 'bold', color: '#fff' }}>
+                    {selectedLaunch?.mission_name || 'Unknown mission'}
+                  </div>
+                  {selectedLaunch?.rocket_name && (
+                    <div style={{ marginTop: 4, fontSize: '0.9rem', color: '#58a6ff', fontStyle: 'italic' }}>
+                      {selectedLaunch.rocket_name}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedLaunchId(null)}
+                  style={{
+                    padding: '0.35rem 0.55rem',
+                    borderRadius: 8,
+                    border: '1px solid #30363d',
+                    background: '#161b22',
+                    color: '#c9d1d9',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <span
+                  style={{
+                    backgroundColor: statusColor(selectedLaunch?.status),
+                    color: '#fff',
+                    padding: '0.25rem 0.6rem',
+                    borderRadius: 6,
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {selectedLaunch?.status || 'Unknown'}
+                </span>
+                <Countdown targetDate={selectedLaunch?.launch_time} />
+              </div>
+
+              <div style={{ marginTop: 10, color: '#8b949e', fontSize: '0.9rem' }}>
+                NET: <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.launch_time ? new Date(selectedLaunch.launch_time).toLocaleString() : 'TBD'}</span>
+              </div>
+
+              <div style={{ marginTop: 6, color: '#8b949e', fontSize: '0.85rem' }}>
+                {formatTimeAgo(selectedLaunch?.last_updated) || 'Updated time not available'}
+              </div>
+            </div>
+
+            <div style={{ padding: '1.0rem 1.1rem', overflowY: 'auto' }}>
+              {/* Watch link */}
+              {(() => {
+                const watchUrl =
+                  (Array.isArray(selectedLaunch?.vid_urls) && selectedLaunch.vid_urls.length ? selectedLaunch.vid_urls[0] : null) ||
+                  selectedLaunch?.watch_url ||
+                  selectedLaunch?.watch_link ||
+                  selectedLaunch?.webcast_url ||
+                  selectedLaunch?.webcast ||
+                  null;
+
+                const isAvailable = Boolean(watchUrl);
+                return (
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 6 }}>Watch</div>
+                    {isAvailable ? (
+                      <a
+                        href={watchUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-block',
+                          padding: '0.55rem 0.8rem',
+                          borderRadius: 8,
+                          border: '1px solid #58a6ff',
+                          background: 'rgba(88, 166, 255, 0.12)',
+                          color: '#58a6ff',
+                          textDecoration: 'none',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        Open live stream
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        title="No watch link provided by the API yet"
+                        style={{
+                          padding: '0.55rem 0.8rem',
+                          borderRadius: 8,
+                          border: '1px solid #30363d',
+                          background: '#161b22',
+                          color: '#8b949e',
+                          cursor: 'not-allowed',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        Watch link not available
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Recovery details */}
+              <div style={{ marginBottom: '1.0rem' }}>
+                <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 8 }}>Recovery</div>
+
+                {selectedLaunch?.recovery_attempted === null || selectedLaunch?.recovery_attempted === undefined ? (
+                  <div style={{ color: '#8b949e' }}>Recovery details not provided yet.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                    <div>
+                      <span style={{ color: '#8b949e' }}>Attempted: </span>
+                      <span style={{ color: '#c9d1d9', fontWeight: 'bold' }}>{selectedLaunch.recovery_attempted ? 'Yes' : 'No'}</span>
+                    </div>
+
+                    {selectedLaunch.recovery_attempted && (
+                      <div>
+                        <span style={{ color: '#8b949e' }}>Success: </span>
+                        <span style={{ color: '#c9d1d9', fontWeight: 'bold' }}>
+                          {selectedLaunch.recovery_success === true ? 'Yes' : selectedLaunch.recovery_success === false ? 'No' : 'Unknown'}
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <span style={{ color: '#8b949e' }}>Method: </span>
+                      <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.recovery_method || '—'}</span>
+                    </div>
+
+                    <div>
+                      <span style={{ color: '#8b949e' }}>Provider: </span>
+                      <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.recovery_provider || '—'}</span>
+                    </div>
+
+                    <div>
+                      <span style={{ color: '#8b949e' }}>Overlay: </span>
+                      <span style={{ color: '#c9d1d9' }}>{selectedRecoveryOverlay?.name || (selectedLaunch?.recovery_overlay_id ? 'Unknown overlay' : '—')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1.0rem', paddingTop: '1.0rem', borderTop: '1px solid #30363d', color: '#8b949e', fontSize: '0.8rem' }}>
+                Pad: <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.pad_name || selectedLaunch?.legacy_pad || 'TBD'}</span>
+                <div style={{ marginTop: 4 }}>
+                  Location: <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.location_name || 'TBD'}</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
         {launches.map((l) => (
           <div
@@ -1144,13 +1376,19 @@ export default function App() {
                 {l.mission_name || 'Unknown Mission'}
               </h2>
 
+              {l.rocket_name && (
+                <div style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: 8, fontStyle: 'italic' }}>
+                  {l.rocket_name}
+                </div>
+              )}
+
               <div style={{ marginBottom: 6 }}>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
                 <span style={{ color: '#c9d1d9' }}>{l.pad_name || l.legacy_pad || 'TBD'}</span>
               </div>
               <div>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
-                <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
+                <span style={{ color: '#c9d1d9' }}>{l.location_name || l.pad_location_name || 'TBD'}</span>
               </div>
 
               {l.recovery_attempted !== null && l.recovery_attempted !== undefined && (

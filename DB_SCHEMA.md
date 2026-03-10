@@ -12,6 +12,10 @@
 | `pad_id` | integer | Launch Library 2 pad ID (normalized join to `pads`) |
 | `location_id` | integer | Launch Library 2 location ID (join to `locations`) |
 | `last_updated` | timestamp | Last update time from Launch Library 2 |
+| `pad_location_name` | string | Raw location name from Launch Library (fallback) |
+| `rocket_name` | string | Full rocket configuration name |
+| `mission_description` | text | Mission summary text |
+| `mission_type` | string | Mission type category |
 | `notified_24h` | boolean | Porch alert sent at T-24h |
 | `notified_1h` | boolean | Porch alert sent at T-1h |
 | `notified_15m` | boolean | Porch alert sent at T-15m |
