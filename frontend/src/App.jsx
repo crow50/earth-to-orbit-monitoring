@@ -543,6 +543,16 @@ export default function App() {
 
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
 
+  // Close the mission drawer with ESC (quality-of-life)
+  useEffect(() => {
+    if (!selectedLaunchId) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setSelectedLaunchId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedLaunchId]);
+
   const [mapHeight, setMapHeight] = useState(380);
   const [lineDashOffset, setLineDashOffset] = useState(0);
 
@@ -1167,6 +1177,11 @@ export default function App() {
                   <div style={{ marginTop: 6, fontSize: '1.15rem', fontWeight: 'bold', color: '#fff' }}>
                     {selectedLaunch?.mission_name || 'Unknown mission'}
                   </div>
+                  {selectedLaunch?.rocket_name && (
+                    <div style={{ marginTop: 4, fontSize: '0.9rem', color: '#58a6ff', fontStyle: 'italic' }}>
+                      {selectedLaunch.rocket_name}
+                    </div>
+                  )}
                 </div>
 
                 <button
