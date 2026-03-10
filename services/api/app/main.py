@@ -387,6 +387,16 @@ def list_launches(
             rows = cur.fetchall()
         conn.close()
 
+        # vid_urls may be stored as full JSON objects (dicts with url/title/source);
+        # flatten to plain URL strings for the response model.
+        for row in rows:
+            raw = row.get("vid_urls")
+            if raw and isinstance(raw, list):
+                row["vid_urls"] = [
+                    item["url"] if isinstance(item, dict) and "url" in item else str(item)
+                    for item in raw
+                ]
+
         if cacheable:
             _cache_set(cache_key, rows)
 
