@@ -14,6 +14,9 @@ services:
     build: ./services/api
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-rl}:${POSTGRES_PASSWORD:-rlpass}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-rocket_launch}
+    # Expose API on localhost so Tailscale Serve can proxy it.
+    ports:
+      - "127.0.0.1:9082:8000"
     depends_on:
       - db
     networks:
@@ -25,7 +28,11 @@ services:
       args:
         # Build-time base path so the app can live under /e2o/ behind the IDX gateway.
         # Override if you want to run it at the root path.
+        # NOTE: Tailscale Serve strips the mounted prefix (/e2o), so the container should serve at '/'.
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/e2o/}
+    # Expose frontend on localhost so Tailscale Serve can proxy it.
+    ports:
+      - "127.0.0.1:9081:80"
     depends_on:
       - api
     networks:
