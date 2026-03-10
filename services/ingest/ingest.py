@@ -275,8 +275,8 @@ def upsert_launches(conn, launches):
                     pad.get("id"),
                     (loc.get("id") if loc else None),
                     l.get("last_updated"),
-                    # LaunchLibrary fields (vid_urls is a list of strings)
-                    l.get("vid_urls") or [],
+                    # LaunchLibrary fields (vid_urls is a json column in DB, must be stringified)
+                    json.dumps(l.get("vid_urls") or []),
                     bool(l.get("webcast_live")) if l.get("webcast_live") is not None else False,
                     # Horizon 2 details
                     (rocket.get("configuration") or {}).get("full_name") or rocket.get("name"),
