@@ -10,6 +10,7 @@
     <style>
       /* Global dark background to prevent white flash on load */
       html, body { margin: 0; padding: 0; background: #0b0e14; }
+      *, *::before, *::after { box-sizing: border-box; }
 
       /* Card hover shimmer (can't do :hover with inline styles) */
       .launch-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }

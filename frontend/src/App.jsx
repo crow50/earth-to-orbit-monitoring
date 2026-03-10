@@ -638,12 +638,13 @@ export default function App() {
               marginTop: '0.75rem',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '1.25rem',
+              gap: '1.25rem 1.5rem',
               alignItems: 'end',
+              padding: '0.5rem 0',
             }}
           >
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Search
             </label>
             <input
@@ -661,8 +662,8 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Status
             </label>
             <select
@@ -687,8 +688,8 @@ export default function App() {
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Location
             </label>
             <select
@@ -713,8 +714,8 @@ export default function App() {
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               From (UTC date)
             </label>
             <input
@@ -732,8 +733,8 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               To (UTC date)
             </label>
             <input
