@@ -265,6 +265,8 @@ def upsert_launches(conn, launches):
         for l in launches:
             pad = l.get("pad") or {}
             loc = pad.get("location") or {}
+            rocket = l.get("rocket") or {}
+            mission = l.get("mission") or {}
 
             data.append(
                 (
@@ -279,13 +281,22 @@ def upsert_launches(conn, launches):
                     # LaunchLibrary fields
                     [url for url in (l.get("vid_urls") or []) if url],
                     bool(l.get("webcast_live")) if l.get("webcast_live") is not None else False,
+                    # Horizon 2 details
+                    (rocket.get("configuration") or {}).get("full_name") or rocket.get("name"),
+                    mission.get("description"),
+                    (mission.get("type") or mission.get("orbit", {})).get("name") if isinstance(mission.get("type"), dict) else mission.get("type"),
+                    loc.get("name") or pad.get("location_name"),
                 )
             )
 
         execute_values(
             cur,
             """
-            INSERT INTO launches (id, name, net, status, pad, pad_id, location_id, last_updated, vid_urls, webcast_live)
+            INSERT INTO launches (
+                id, name, net, status, pad, pad_id, location_id, last_updated, 
+                vid_urls, webcast_live, rocket_name, mission_description, 
+                mission_type, pad_location_name
+            )
             VALUES %s
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
@@ -296,7 +307,11 @@ def upsert_launches(conn, launches):
                 location_id = EXCLUDED.location_id,
                 last_updated = EXCLUDED.last_updated,
                 vid_urls = EXCLUDED.vid_urls,
-                webcast_live = EXCLUDED.webcast_live;
+                webcast_live = EXCLUDED.webcast_live,
+                rocket_name = EXCLUDED.rocket_name,
+                mission_description = EXCLUDED.mission_description,
+                mission_type = EXCLUDED.mission_type,
+                pad_location_name = EXCLUDED.pad_location_name;
             """,
             data,
         )
