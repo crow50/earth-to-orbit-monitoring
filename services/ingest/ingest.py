@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import time
 
@@ -160,8 +161,6 @@ def _upsert_overlay_from_landing(cur, landing: dict) -> int | None:
         # If we can't locate it (common for ASDS), keep it unmapped for now.
         return None
 
-    import json
-
     feature = {
         "type": "Feature",
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
@@ -229,8 +228,6 @@ def upsert_recovery_events(conn, launches):
                         overlay_id = row[0]
 
             method = ((landing.get("type") or {}).get("abbrev") or None)
-
-            import json
 
             cur.execute(
                 """
