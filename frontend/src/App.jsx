@@ -390,29 +390,25 @@ export default function App() {
     window.history.replaceState(null, '', nextUrl);
   }, [aq, aSelectedStatuses, aSelectedLocationIds, aUpcomingOnly, aFromDate, aToDate]);
 
-  // Use Vite's BASE_URL so the app can be hosted under a sub-path (e.g. /e2o/)
-  // without hard-coding absolute /api URLs.
-  const api = useMemo(() => axios.create({ baseURL: import.meta.env.BASE_URL }), []);
-
   // Load filter metadata once
   useEffect(() => {
-    api
-      .get('api/v1/meta/filters')
+    axios
+      .get('/api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
-  }, [api]);
+  }, []);
 
   // Load overlays (Horizon 2) once
   useEffect(() => {
     // Pull all overlay types so recovery can reference ASDS as well.
-    api
-      .get('api/v1/overlays', { params: { is_active: true } })
+    axios
+      .get('/api/v1/overlays', { params: { is_active: true } })
       .then((r) => setOverlays(r.data || []))
       .catch((e) => {
         console.error(e);
         setOverlays([]);
       });
-  }, [api]);
+  }, []);
 
   const selectedLaunch = useMemo(() => {
     if (!selectedLaunchId) return null;
@@ -449,8 +445,8 @@ export default function App() {
 
     const fetchData = () => {
       setLoading(true);
-      api
-        .get('api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
+      axios
+        .get('/api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
         .then((r) => {
           if (!cancelled) setLaunches(r.data);
         })
@@ -1171,11 +1167,6 @@ export default function App() {
                   <div style={{ marginTop: 6, fontSize: '1.15rem', fontWeight: 'bold', color: '#fff' }}>
                     {selectedLaunch?.mission_name || 'Unknown mission'}
                   </div>
-                  {selectedLaunch?.rocket_name && (
-                    <div style={{ marginTop: 4, fontSize: '0.9rem', color: '#58a6ff', fontStyle: 'italic' }}>
-                      {selectedLaunch.rocket_name}
-                    </div>
-                  )}
                 </div>
 
                 <button
@@ -1376,19 +1367,13 @@ export default function App() {
                 {l.mission_name || 'Unknown Mission'}
               </h2>
 
-              {l.rocket_name && (
-                <div style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: 8, fontStyle: 'italic' }}>
-                  {l.rocket_name}
-                </div>
-              )}
-
               <div style={{ marginBottom: 6 }}>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
                 <span style={{ color: '#c9d1d9' }}>{l.pad_name || l.legacy_pad || 'TBD'}</span>
               </div>
               <div>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Location: </span>
-                <span style={{ color: '#c9d1d9' }}>{l.location_name || l.pad_location_name || 'TBD'}</span>
+                <span style={{ color: '#c9d1d9' }}>{l.location_name || 'TBD'}</span>
               </div>
 
               {l.recovery_attempted !== null && l.recovery_attempted !== undefined && (

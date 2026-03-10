@@ -265,9 +265,6 @@ def upsert_launches(conn, launches):
         for l in launches:
             pad = l.get("pad") or {}
             loc = pad.get("location") or {}
-            mission = l.get("mission") or {}
-            rocket = l.get("rocket") or {}
-            config = rocket.get("configuration") or {}
 
             data.append(
                 (
@@ -282,22 +279,13 @@ def upsert_launches(conn, launches):
                     # LaunchLibrary fields
                     [url for url in (l.get("vid_urls") or []) if url],
                     bool(l.get("webcast_live")) if l.get("webcast_live") is not None else False,
-                    # New detail fields
-                    config.get("full_name") or config.get("name"),
-                    mission.get("description"),
-                    mission.get("type"),
-                    loc.get("name"),
                 )
             )
 
         execute_values(
             cur,
             """
-            INSERT INTO launches (
-                id, name, net, status, pad, pad_id, location_id, last_updated, 
-                vid_urls, webcast_live, rocket_name, mission_description, 
-                mission_type, pad_location_name
-            )
+            INSERT INTO launches (id, name, net, status, pad, pad_id, location_id, last_updated, vid_urls, webcast_live)
             VALUES %s
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
@@ -308,11 +296,7 @@ def upsert_launches(conn, launches):
                 location_id = EXCLUDED.location_id,
                 last_updated = EXCLUDED.last_updated,
                 vid_urls = EXCLUDED.vid_urls,
-                webcast_live = EXCLUDED.webcast_live,
-                rocket_name = EXCLUDED.rocket_name,
-                mission_description = EXCLUDED.mission_description,
-                mission_type = EXCLUDED.mission_type,
-                pad_location_name = EXCLUDED.pad_location_name;
+                webcast_live = EXCLUDED.webcast_live;
             """,
             data,
         )
