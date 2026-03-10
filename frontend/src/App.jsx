@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 
 // Create an axios instance with the Vite base path so API calls work behind
@@ -56,6 +56,19 @@ function toUtcIsoFromDateOnly(dateStr, { endOfDay = false } = {}) {
   return `${dateStr}${suffix}`;
 }
 
+function prettyRecoveryMethod(method) {
+  if (!method) return null;
+  const raw = String(method).trim();
+  const m = raw.toUpperCase();
+
+  // Common acronyms/abbrevs → user-friendly labels.
+  if (m === 'ASDS') return 'Drone ship (ASDS)';
+  if (m === 'RTLS') return 'Return to launch site (RTLS)';
+  if (m === 'LZ') return 'Landing zone (LZ)';
+
+  return raw;
+}
+
 function MapFitBounds({ points, enabled, resetNonce }) {
   const map = useMap();
   const lastBoundsRef = useRef(null);
@@ -75,6 +88,16 @@ function MapFitBounds({ points, enabled, resetNonce }) {
     }
 
     map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
+
+    // Avoid zooming *too* far out by default; it makes the map feel empty.
+    // NOTE: This trades some bounds completeness for UX. User can still zoom out manually.
+    try {
+      const z = map.getZoom();
+      if (z < 3) map.setZoom(3);
+    } catch {
+      // ignore
+    }
+
     lastBoundsRef.current = bounds;
   }, [map, points, enabled, resetNonce]);
 
@@ -561,6 +584,36 @@ export default function App() {
   const [mapHeight, setMapHeight] = useState(380);
   const [lineDashOffset, setLineDashOffset] = useState(0);
 
+  // Measure sticky filter bar height so the sticky map can sit *directly* under it.
+  // Otherwise, when the filter bar collapses, the map's hardcoded `top` leaves a gap
+  // where content can scroll underneath.
+  const filterBarRef = useRef(null);
+  const [filterBarHeight, setFilterBarHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = filterBarRef.current;
+    if (!el) return undefined;
+
+    const measure = () => {
+      try {
+        setFilterBarHeight(Math.ceil(el.getBoundingClientRect().height));
+      } catch {
+        // ignore
+      }
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const compute = () => {
       const isMobile = window.innerWidth <= 768;
@@ -596,6 +649,16 @@ export default function App() {
         minHeight: '100vh',
       }}
     >
+      <style>{`
+        /* Leaflet tile seam/artifact mitigation (esp. during scroll + sticky). */
+        .leaflet-container img.leaflet-tile {
+          mix-blend-mode: normal !important;
+        }
+        .leaflet-tile {
+          outline: 1px solid transparent;
+        }
+      `}</style>
+
       <header style={{ marginBottom: '1.0rem', borderBottom: '1px solid #2d333b', paddingBottom: '0.75rem' }}>
         <h1 style={{ margin: 0, color: '#fff', letterSpacing: '1px' }}>EARTH TO ORBIT</h1>
         <p style={{ margin: '0.5rem 0 0', color: '#8b949e' }}>Mission Control Monitoring Dashboard</p>
@@ -603,6 +666,7 @@ export default function App() {
 
       {/* Sticky filter bar (stays above map when scrolling) */}
       <section
+        ref={filterBarRef}
         style={{
           position: 'sticky',
           top: 0,
@@ -611,7 +675,7 @@ export default function App() {
           paddingTop: '0.75rem',
           paddingBottom: '0.75rem',
           borderBottom: '1px solid #2d333b',
-          marginBottom: '1.0rem',
+          marginBottom: 0,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
@@ -859,8 +923,8 @@ export default function App() {
           overflow: 'hidden',
           marginBottom: '1.5rem',
           position: 'sticky',
-          top: '5.75rem',
-          zIndex: 10,
+          top: filterBarHeight ? `${filterBarHeight}px` : '5.75rem',
+          zIndex: 15,
         }}
       >
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
@@ -1021,7 +1085,7 @@ export default function App() {
                 }}
               >
                 <Tooltip sticky opacity={0.95}>
-                  {selectedLaunch.recovery_method || (selectedRecoveryOverlay?.overlay_type === 'asds' ? 'ASDS' : 'RTLS')}
+                  {prettyRecoveryMethod(selectedLaunch.recovery_method) || (selectedRecoveryOverlay?.overlay_type === 'asds' ? 'Drone ship (ASDS)' : 'Return to launch site (RTLS)')}
                 </Tooltip>
               </Polyline>
             )}
@@ -1313,8 +1377,8 @@ export default function App() {
                     )}
 
                     <div>
-                      <span style={{ color: '#8b949e' }}>Method: </span>
-                      <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.recovery_method || '—'}</span>
+                      <span style={{ color: '#8b949e' }}>Landing: </span>
+                      <span style={{ color: '#c9d1d9' }}>{prettyRecoveryMethod(selectedLaunch?.recovery_method) || '—'}</span>
                     </div>
 
                     <div>
@@ -1415,7 +1479,7 @@ export default function App() {
                   )}
                   {(l.recovery_method || l.recovery_provider) && (
                     <div style={{ marginTop: 4, color: '#8b949e', fontSize: '0.85rem' }}>
-                      {l.recovery_method ? `Method: ${l.recovery_method}` : ''}
+                      {l.recovery_method ? `Landing: ${prettyRecoveryMethod(l.recovery_method)}` : ''}
                       {l.recovery_method && l.recovery_provider ? ' · ' : ''}
                       {l.recovery_provider ? `Source: ${l.recovery_provider}` : ''}
                     </div>
