@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+
+// Use Vite base path so API calls work behind reverse-proxy prefixes (e.g. /e2o/)
+axios.defaults.baseURL = import.meta.env.BASE_URL;
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -626,7 +629,7 @@ export default function App() {
             Filters{activeFilterCount ? ` (${activeFilterCount})` : ''} {filtersCollapsed ? '▸' : '▾'}
           </button>
 
-          <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
+          <span className={loading ? 'loading-pulse' : ''} style={{ color: '#58a6ff', fontSize: '0.85rem', fontWeight: loading ? 'bold' : 'normal' }}>{loading ? '● Refreshing…' : ' '}</span>
         </div>
 
         {!filtersCollapsed && (
@@ -936,8 +939,10 @@ export default function App() {
               landingMarkerRef={landingMarkerRef}
             />
             <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+              url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              subdomains='abcd'
+              maxZoom={20}
             />
 
             {/* Overlays */}
@@ -1345,6 +1350,7 @@ export default function App() {
               }
             }}
             tabIndex={0}
+            className="launch-card"
             style={{
               backgroundColor: '#161b22',
               borderRadius: 8,
@@ -1355,7 +1361,6 @@ export default function App() {
               justifyContent: 'space-between',
               boxShadow: l.id === selectedLaunchId ? '0 0 15px rgba(88, 166, 255, 0.4)' : '0 4px 6px rgba(0,0,0,0.3)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
               transform: l.id === selectedLaunchId ? 'translateY(-2px)' : 'none',
             }}
           >
@@ -1378,9 +1383,14 @@ export default function App() {
                 <Countdown targetDate={l.launch_time} />
               </div>
 
-              <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.5rem', color: '#58a6ff' }}>
+              <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.25rem', color: '#58a6ff' }}>
                 {l.mission_name || 'Unknown Mission'}
               </h2>
+              {l.rocket_name && (
+                <div style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: '0.5rem', fontStyle: 'italic' }}>
+                  {l.rocket_name}
+                </div>
+              )}
 
               <div style={{ marginBottom: 6 }}>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
@@ -1510,10 +1520,34 @@ export default function App() {
 
         {loading && launches.length === 0 && (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
-            Loading…
+            <div className="loading-pulse" style={{ fontSize: '1.1rem', color: '#58a6ff', marginBottom: '0.5rem' }}>● Loading missions…</div>
+            <div style={{ fontSize: '0.85rem' }}>Fetching data from the API</div>
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer style={{
+        marginTop: '3rem',
+        paddingTop: '1.5rem',
+        borderTop: '1px solid #2d333b',
+        textAlign: 'center',
+        color: '#484f58',
+        fontSize: '0.8rem',
+      }}>
+        <div>Earth to Orbit Monitoring Dashboard</div>
+        <div style={{ marginTop: '0.35rem' }}>
+          Data sourced from{' '}
+          <a href="https://thespacedevs.com/" target="_blank" rel="noreferrer" style={{ color: '#58a6ff', textDecoration: 'none' }}>
+            The Space Devs
+          </a>
+          {' · '}
+          Map tiles by{' '}
+          <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: '#58a6ff', textDecoration: 'none' }}>
+            CARTO
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
