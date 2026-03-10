@@ -69,6 +69,17 @@ function prettyRecoveryMethod(method) {
   return raw;
 }
 
+function utcDateOnly(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return dt.toISOString().slice(0, 10);
+}
+
+function addDaysUtc(d = new Date(), days = 0) {
+  const dt = d instanceof Date ? new Date(d.getTime()) : new Date(d);
+  dt.setUTCDate(dt.getUTCDate() + Number(days));
+  return dt;
+}
+
 function MapFitBounds({ points, enabled, resetNonce }) {
   const map = useMap();
   const lastBoundsRef = useRef(null);
@@ -309,8 +320,15 @@ export default function App() {
 
   const [mapResetNonce, setMapResetNonce] = useState(0);
 
+  const todayUtc = utcDateOnly();
+
   const hasExplicitRange = Boolean(fromDate || toDate);
   const hasExplicitRangeApplied = Boolean(aFromDate || aToDate);
+
+  // Timeline mode detection (used to highlight the segmented control).
+  const isTimelineAll = !upcomingOnly && fromDate === defaultWindow.from && toDate === defaultWindow.to;
+  const isTimelineUpcoming = Boolean(upcomingOnly) && !fromDate && !toDate;
+  const isTimelineHistorical = !upcomingOnly && fromDate === defaultWindow.from && toDate === todayUtc;
 
   const didInitFromUrl = useRef(false);
 
@@ -562,6 +580,14 @@ export default function App() {
 
   const mapCenter = mapPoints.length ? [mapPoints[0].lat, mapPoints[0].lon] : [20, 0];
 
+  const draftFilterCount =
+    (q ? 1 : 0) +
+    (selectedStatuses.length ? 1 : 0) +
+    (selectedLocationIds.length ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (upcomingOnly ? 1 : 0);
+
   const activeFilterCount =
     (aq ? 1 : 0) +
     (aSelectedStatuses.length ? 1 : 0) +
@@ -571,6 +597,9 @@ export default function App() {
     (aUpcomingOnly ? 1 : 0);
 
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+
+  // Tiny UX helper for the mission detail drawer.
+  const [copiedMissionId, setCopiedMissionId] = useState(false);
 
   // Close the mission drawer with ESC (quality-of-life)
   useEffect(() => {
@@ -789,15 +818,150 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', paddingBottom: '0.2rem', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#c9d1d9' }}>
-              <input
-                type="checkbox"
-                checked={upcomingOnly}
-                onChange={(e) => setUpcomingOnly(e.target.checked)}
-                disabled={Boolean(fromDate || toDate)}
-              />
-              Upcoming only
-            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ color: '#8b949e', fontSize: '0.8rem' }}>Timeline:</span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(defaultWindow.from);
+                  setToDate(defaultWindow.to);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineAll ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineAll ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineAll ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineAll ? 'bold' : 'normal',
+                }}
+              >
+                All
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(true);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineUpcoming ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineUpcoming ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineUpcoming ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineUpcoming ? 'bold' : 'normal',
+                }}
+              >
+                Upcoming
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(defaultWindow.from);
+                  setToDate(todayUtc);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineHistorical ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineHistorical ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineHistorical ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineHistorical ? 'bold' : 'normal',
+                }}
+              >
+                Historical
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ color: '#8b949e', fontSize: '0.8rem' }}>Presets:</span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(utcDateOnly(addDaysUtc(new Date(), -30)));
+                  setToDate(todayUtc);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Last 30d
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(todayUtc);
+                  setToDate(utcDateOnly(addDaysUtc(new Date(), 7)));
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Next 7d
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const y = new Date().getUTCFullYear();
+                  setFromDate(`${y}-01-01`);
+                  setToDate(`${y}-12-31`);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                This year
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                All time
+              </button>
+            </div>
 
             <button
               type="button"
@@ -825,7 +989,7 @@ export default function App() {
                 fontWeight: 'bold',
               }}
             >
-              Apply
+              Apply{draftFilterCount ? ` (${draftFilterCount})` : ''}
             </button>
 
             <button
@@ -1324,6 +1488,40 @@ export default function App() {
                 );
               })()}
 
+              {/* Tools */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 6 }}>Tools</div>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const id = selectedLaunch?.id;
+                        if (!id) return;
+                        await navigator.clipboard.writeText(String(id));
+                        setCopiedMissionId(true);
+                        window.setTimeout(() => setCopiedMissionId(false), 1200);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    style={{
+                      padding: '0.55rem 0.8rem',
+                      borderRadius: 8,
+                      border: '1px solid #30363d',
+                      background: '#161b22',
+                      color: '#c9d1d9',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    Copy Mission ID
+                  </button>
+
+                  {copiedMissionId && <span style={{ color: '#7ee787', fontSize: '0.85rem' }}>Copied</span>}
+                </div>
+              </div>
+
               {/* Recovery details */}
               <div style={{ marginBottom: '1.0rem' }}>
                 <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 8 }}>Recovery</div>
@@ -1459,7 +1657,10 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #30363d', fontSize: '0.85rem', color: '#8b949e' }}>
-              {l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}
+              <div>{l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}</div>
+              {formatTimeAgo(l.last_updated) && (
+                <div style={{ marginTop: 4, fontSize: '0.8rem', color: '#6e7681' }}>{formatTimeAgo(l.last_updated)}</div>
+              )}
             </div>
           </div>
         ))}
