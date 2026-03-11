@@ -8,6 +8,9 @@ const api = axios.create({ baseURL: import.meta.env.BASE_URL });
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
 // Fix default marker icons for bundlers (Vite)
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -186,6 +189,73 @@ function MapSelectionFlyTo({ selectedPoint, enabled = true }) {
       duration: 0.8,
     });
   }, [map, selectedPoint, enabled]);
+
+  return null;
+}
+
+// Lightweight marker-cluster integration using Leaflet.markercluster. We avoid
+// React wrappers to keep control over popups and refs used elsewhere.
+function MarkerClusterLayer({ points, onMarkerClick, selectedId, launchMarkerRefs }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const cluster = L.markerClusterGroup({ chunkedLoading: true });
+
+    const markers = points.map((p) => {
+      const marker = L.marker([p.lat, p.lon], { title: p.mission_name || '', riseOnHover: true });
+
+      const tooltipText = `Launch Pad: ${p.pad_name || p.location_name || 'Unknown'}`;
+      marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -8], opacity: 0.9 });
+
+      const popupHtml = `
+        <div style="max-width:280px">
+          <div style="font-weight:bold;margin-bottom:6px;color:#58a6ff">${String(p.mission_name || 'Unknown mission')}</div>
+          <div style="margin-bottom:6px"><span style="background:${statusColor(p.status)};color:#fff;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:bold;text-transform:uppercase">${p.status || 'Unknown'}</span></div>
+          <div style="color:#8b949e;font-size:0.85rem">Launch Pad: ${p.pad_name || p.location_name || 'Unknown'}</div>
+          <div style="color:#8b949e;font-size:0.85rem">${p.location_name || ''}</div>
+          <div style="margin-top:8px;font-family:monospace;font-size:0.85rem">${p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}</div>
+        </div>
+      `;
+
+      marker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 200 });
+
+      marker.on('click', () => {
+        try {
+          onMarkerClick(p.id);
+        } catch (e) {
+          // ignore
+        }
+      });
+
+      // Expose marker to launchMarkerRefs so MapCloseAndOpenPopups can open it.
+      try {
+        if (launchMarkerRefs && launchMarkerRefs.current) launchMarkerRefs.current.set(p.id, marker);
+      } catch (e) {
+        // ignore
+      }
+
+      cluster.addLayer(marker);
+      return marker;
+    });
+
+    map.addLayer(cluster);
+
+    return () => {
+      try {
+        map.removeLayer(cluster);
+      } catch (e) {
+        // ignore
+      }
+      // cleanup refs
+      try {
+        if (launchMarkerRefs && launchMarkerRefs.current) {
+          markers.forEach((m, i) => launchMarkerRefs.current.delete(points[i].id));
+        }
+      } catch (e) {}
+    };
+  }, [map, points, selectedId, onMarkerClick, launchMarkerRefs]);
 
   return null;
 }
@@ -1224,113 +1294,7 @@ export default function App() {
               </Polyline>
             )}
 
-            {mapPointGroups.map((g) => {
-              const count = g.points.length;
-
-              if (count === 1) {
-                const p = g.points[0];
-                return (
-                  <CircleMarker
-                    key={p.id}
-                    center={[p.lat, p.lon]}
-                    radius={7}
-                    pathOptions={{
-                      color: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      weight: p.id === selectedLaunchId ? 3 : selectedLaunchId ? 1 : 2,
-                      fillColor: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      fillOpacity: selectedLaunchId && p.id !== selectedLaunchId ? 0.06 : 0.60,
-                    }}
-                    eventHandlers={{
-                      click: () => setSelectedLaunchId(p.id),
-                    }}
-                    ref={(ref) => {
-                      if (ref) launchMarkerRefs.current.set(p.id, ref);
-                    }}
-                  >
-                    <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
-                      Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
-                    </Tooltip>
-                    <Popup offset={launchPopupOffset} maxWidth={300} minWidth={200}>
-                      <div style={{ maxWidth: 280 }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
-                        <div style={{ marginBottom: 6 }}>
-                          <span
-                            style={{
-                              backgroundColor: statusColor(p.status),
-                              color: '#fff',
-                              padding: '0.15rem 0.5rem',
-                              borderRadius: 4,
-                              fontSize: '0.75rem',
-                              fontWeight: 'bold',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {p.status || 'Unknown'}
-                          </span>
-                        </div>
-                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
-                          Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
-                        </div>
-                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
-                        <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                          {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
-                        </div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                );
-              }
-
-              // Cluster marker for overlapping launches.
-              return (
-                <CircleMarker
-                  key={g.key}
-                  center={[g.lat, g.lon]}
-                  radius={12}
-                  pathOptions={{
-                    color: '#2f81f7',
-                    weight: 2,
-                    fillColor: '#2f81f7',
-                    fillOpacity: 0.75,
-                  }}
-                >
-                  <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
-                    {count} launches at this pad
-                  </Tooltip>
-                  <Popup maxWidth={340} minWidth={220}>
-                    <div style={{ maxWidth: 320 }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Launches at this pad ({count})</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {g.points
-                          .slice()
-                          .sort((a, b) => String(a.launch_time || '').localeCompare(String(b.launch_time || '')))
-                          .map((p) => (
-                            <button
-                              key={`pick-${p.id}`}
-                              type="button"
-                              onClick={() => setSelectedLaunchId(p.id)}
-                              style={{
-                                textAlign: 'left',
-                                padding: '0.35rem 0.5rem',
-                                borderRadius: 6,
-                                border: '1px solid #30363d',
-                                background: '#0b0e14',
-                                color: '#c9d1d9',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <div style={{ fontWeight: 'bold', color: '#58a6ff' }}>{p.mission_name || 'Unknown mission'}</div>
-                              <div style={{ fontSize: '0.85rem', color: '#8b949e' }}>
-                                {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'} · {p.status || 'Unknown'}
-                              </div>
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              );
-            })}
+            <MarkerClusterLayer points={mapPoints} onMarkerClick={setSelectedLaunchId} selectedId={selectedLaunchId} launchMarkerRefs={launchMarkerRefs} />
           </MapContainer>
         </div>
       </section>
