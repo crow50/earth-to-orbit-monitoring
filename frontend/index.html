@@ -3,7 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earth to Orbit Monitoring Dashboard</title>
+    <meta name="description" content="Real-time launch tracking and mission monitoring dashboard for orbital missions worldwide.">
+    <meta name="theme-color" content="#0b0e14">
+    <title>Earth to Orbit — Mission Monitoring</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    <style>
+      /* Global dark background to prevent white flash on load */
+      html, body { margin: 0; padding: 0; background: #0b0e14; }
+      *, *::before, *::after { box-sizing: border-box; }
+
+      /* Card hover shimmer (can't do :hover with inline styles) */
+      .launch-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+      .launch-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.5) !important; border-color: #58a6ff !important; }
+      .launch-card:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+
+      /* Pulse animation for loading indicator */
+      @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+      .loading-pulse { animation: pulse 1.4s ease-in-out infinite; }
+
+      /* Scrollbar styling for dark theme */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #0b0e14; }
+      ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+    </style>
 </head>
 <body>
     <div id="root"></div>
