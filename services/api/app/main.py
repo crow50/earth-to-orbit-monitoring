@@ -144,8 +144,14 @@ def _cache_set(key: Tuple, data: list[dict]) -> None:
 
 @app.get("/")
 def read_root():
-    # Useful for direct container access; in production, the site root is owned by the frontend.
-    return RedirectResponse(url="/api/docs")
+    # Keep root lightweight; docs live at /api/docs.
+    return {"service": "e2o-api", "status": "ok"}
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health_root():
+    # Convenience healthcheck when mounted behind a prefix-stripping reverse proxy.
+    return health()
 
 
 @app.get("/api")
@@ -380,6 +386,16 @@ def list_launches(
             cur.execute(sql, params)
             rows = cur.fetchall()
         conn.close()
+
+        # vid_urls may be stored as full JSON objects (dicts with url/title/source);
+        # flatten to plain URL strings for the response model.
+        for row in rows:
+            raw = row.get("vid_urls")
+            if raw and isinstance(raw, list):
+                row["vid_urls"] = [
+                    item["url"] if isinstance(item, dict) and "url" in item else str(item)
+                    for item in raw
+                ]
 
         if cacheable:
             _cache_set(cache_key, rows)

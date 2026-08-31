@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+
+// Create an axios instance with the Vite base path so API calls work behind
+// reverse-proxy prefixes (e.g. /e2o/).  Paths must be relative (no leading /)
+// so axios actually prepends the baseURL.
+const api = axios.create({ baseURL: import.meta.env.BASE_URL });
 import { CircleMarker, GeoJSON, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
 // Fix default marker icons for bundlers (Vite)
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -51,6 +59,30 @@ function toUtcIsoFromDateOnly(dateStr, { endOfDay = false } = {}) {
   return `${dateStr}${suffix}`;
 }
 
+function prettyRecoveryMethod(method) {
+  if (!method) return null;
+  const raw = String(method).trim();
+  const m = raw.toUpperCase();
+
+  // Common acronyms/abbrevs → user-friendly labels.
+  if (m === 'ASDS') return 'Drone ship (ASDS)';
+  if (m === 'RTLS') return 'Return to launch site (RTLS)';
+  if (m === 'LZ') return 'Landing zone (LZ)';
+
+  return raw;
+}
+
+function utcDateOnly(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return dt.toISOString().slice(0, 10);
+}
+
+function addDaysUtc(d = new Date(), days = 0) {
+  const dt = d instanceof Date ? new Date(d.getTime()) : new Date(d);
+  dt.setUTCDate(dt.getUTCDate() + Number(days));
+  return dt;
+}
+
 function MapFitBounds({ points, enabled, resetNonce }) {
   const map = useMap();
   const lastBoundsRef = useRef(null);
@@ -70,6 +102,17 @@ function MapFitBounds({ points, enabled, resetNonce }) {
     }
 
     map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
+
+    // Avoid zooming *too* far out by default; it makes the map feel empty.
+    // NOTE: This trades some bounds completeness for UX. User can still zoom out manually.
+    try {
+      const z = map.getZoom();
+      // Keep the view from being *extremely* zoomed out, but avoid forcing a tight zoom.
+      if (z < 2.2) map.setZoom(2.2);
+    } catch {
+      // ignore
+    }
+
     lastBoundsRef.current = bounds;
   }, [map, points, enabled, resetNonce]);
 
@@ -146,6 +189,73 @@ function MapSelectionFlyTo({ selectedPoint, enabled = true }) {
       duration: 0.8,
     });
   }, [map, selectedPoint, enabled]);
+
+  return null;
+}
+
+// Lightweight marker-cluster integration using Leaflet.markercluster. We avoid
+// React wrappers to keep control over popups and refs used elsewhere.
+function MarkerClusterLayer({ points, onMarkerClick, selectedId, launchMarkerRefs }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const cluster = L.markerClusterGroup({ chunkedLoading: true });
+
+    const markers = points.map((p) => {
+      const marker = L.marker([p.lat, p.lon], { title: p.mission_name || '', riseOnHover: true });
+
+      const tooltipText = `Launch Pad: ${p.pad_name || p.location_name || 'Unknown'}`;
+      marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -8], opacity: 0.9 });
+
+      const popupHtml = `
+        <div style="max-width:280px">
+          <div style="font-weight:bold;margin-bottom:6px;color:#58a6ff">${String(p.mission_name || 'Unknown mission')}</div>
+          <div style="margin-bottom:6px"><span style="background:${statusColor(p.status)};color:#fff;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:bold;text-transform:uppercase">${p.status || 'Unknown'}</span></div>
+          <div style="color:#8b949e;font-size:0.85rem">Launch Pad: ${p.pad_name || p.location_name || 'Unknown'}</div>
+          <div style="color:#8b949e;font-size:0.85rem">${p.location_name || ''}</div>
+          <div style="margin-top:8px;font-family:monospace;font-size:0.85rem">${p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}</div>
+        </div>
+      `;
+
+      marker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 200 });
+
+      marker.on('click', () => {
+        try {
+          onMarkerClick(p.id);
+        } catch (e) {
+          // ignore
+        }
+      });
+
+      // Expose marker to launchMarkerRefs so MapCloseAndOpenPopups can open it.
+      try {
+        if (launchMarkerRefs && launchMarkerRefs.current) launchMarkerRefs.current.set(p.id, marker);
+      } catch (e) {
+        // ignore
+      }
+
+      cluster.addLayer(marker);
+      return marker;
+    });
+
+    map.addLayer(cluster);
+
+    return () => {
+      try {
+        map.removeLayer(cluster);
+      } catch (e) {
+        // ignore
+      }
+      // cleanup refs
+      try {
+        if (launchMarkerRefs && launchMarkerRefs.current) {
+          markers.forEach((m, i) => launchMarkerRefs.current.delete(points[i].id));
+        }
+      } catch (e) {}
+    };
+  }, [map, points, selectedId, onMarkerClick, launchMarkerRefs]);
 
   return null;
 }
@@ -280,8 +390,15 @@ export default function App() {
 
   const [mapResetNonce, setMapResetNonce] = useState(0);
 
+  const todayUtc = utcDateOnly();
+
   const hasExplicitRange = Boolean(fromDate || toDate);
   const hasExplicitRangeApplied = Boolean(aFromDate || aToDate);
+
+  // Timeline mode detection (used to highlight the segmented control).
+  const isTimelineAll = !upcomingOnly && fromDate === defaultWindow.from && toDate === defaultWindow.to;
+  const isTimelineUpcoming = Boolean(upcomingOnly) && !fromDate && !toDate;
+  const isTimelineHistorical = !upcomingOnly && fromDate === defaultWindow.from && toDate === todayUtc;
 
   const didInitFromUrl = useRef(false);
 
@@ -392,8 +509,8 @@ export default function App() {
 
   // Load filter metadata once
   useEffect(() => {
-    axios
-      .get('/api/v1/meta/filters')
+    api
+      .get('api/v1/meta/filters')
       .then((r) => setMeta(r.data))
       .catch((e) => console.error(e));
   }, []);
@@ -401,8 +518,8 @@ export default function App() {
   // Load overlays (Horizon 2) once
   useEffect(() => {
     // Pull all overlay types so recovery can reference ASDS as well.
-    axios
-      .get('/api/v1/overlays', { params: { is_active: true } })
+    api
+      .get('api/v1/overlays', { params: { is_active: true } })
       .then((r) => setOverlays(r.data || []))
       .catch((e) => {
         console.error(e);
@@ -445,8 +562,8 @@ export default function App() {
 
     const fetchData = () => {
       setLoading(true);
-      axios
-        .get('/api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
+      api
+        .get('api/v1/launches', { params: queryParams, paramsSerializer: { indexes: null } })
         .then((r) => {
           if (!cancelled) setLaunches(r.data);
         })
@@ -533,6 +650,14 @@ export default function App() {
 
   const mapCenter = mapPoints.length ? [mapPoints[0].lat, mapPoints[0].lon] : [20, 0];
 
+  const draftFilterCount =
+    (q ? 1 : 0) +
+    (selectedStatuses.length ? 1 : 0) +
+    (selectedLocationIds.length ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (upcomingOnly ? 1 : 0);
+
   const activeFilterCount =
     (aq ? 1 : 0) +
     (aSelectedStatuses.length ? 1 : 0) +
@@ -542,6 +667,9 @@ export default function App() {
     (aUpcomingOnly ? 1 : 0);
 
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+
+  // Tiny UX helper for the mission detail drawer.
+  const [copiedMissionId, setCopiedMissionId] = useState(false);
 
   // Close the mission drawer with ESC (quality-of-life)
   useEffect(() => {
@@ -591,6 +719,16 @@ export default function App() {
         minHeight: '100vh',
       }}
     >
+      <style>{`
+        /* Leaflet tile seam/artifact mitigation (esp. during scroll + sticky). */
+        .leaflet-container img.leaflet-tile {
+          mix-blend-mode: normal !important;
+        }
+        .leaflet-tile {
+          outline: 1px solid transparent;
+        }
+      `}</style>
+
       <header style={{ marginBottom: '1.0rem', borderBottom: '1px solid #2d333b', paddingBottom: '0.75rem' }}>
         <h1 style={{ margin: 0, color: '#fff', letterSpacing: '1px' }}>EARTH TO ORBIT</h1>
         <p style={{ margin: '0.5rem 0 0', color: '#8b949e' }}>Mission Control Monitoring Dashboard</p>
@@ -606,7 +744,7 @@ export default function App() {
           paddingTop: '0.75rem',
           paddingBottom: '0.75rem',
           borderBottom: '1px solid #2d333b',
-          marginBottom: '1.0rem',
+          marginBottom: 0,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
@@ -626,7 +764,7 @@ export default function App() {
             Filters{activeFilterCount ? ` (${activeFilterCount})` : ''} {filtersCollapsed ? '▸' : '▾'}
           </button>
 
-          <span style={{ color: '#8b949e', fontSize: '0.85rem' }}>{loading ? 'Refreshing…' : ' '}</span>
+          <span className={loading ? 'loading-pulse' : ''} style={{ color: '#58a6ff', fontSize: '0.85rem', fontWeight: loading ? 'bold' : 'normal' }}>{loading ? '● Refreshing…' : ' '}</span>
         </div>
 
         {!filtersCollapsed && (
@@ -635,12 +773,13 @@ export default function App() {
               marginTop: '0.75rem',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '1.25rem',
+              gap: '1.25rem 1.5rem',
               alignItems: 'end',
+              padding: '0.5rem 0',
             }}
           >
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Search
             </label>
             <input
@@ -658,8 +797,8 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Status
             </label>
             <select
@@ -684,8 +823,8 @@ export default function App() {
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               Location
             </label>
             <select
@@ -710,8 +849,8 @@ export default function App() {
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               From (UTC date)
             </label>
             <input
@@ -729,8 +868,8 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.25rem' }}>
+          <div style={{ minWidth: 0 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#8b949e', marginBottom: '0.4rem' }}>
               To (UTC date)
             </label>
             <input
@@ -749,15 +888,150 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', paddingBottom: '0.2rem', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#c9d1d9' }}>
-              <input
-                type="checkbox"
-                checked={upcomingOnly}
-                onChange={(e) => setUpcomingOnly(e.target.checked)}
-                disabled={Boolean(fromDate || toDate)}
-              />
-              Upcoming only
-            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ color: '#8b949e', fontSize: '0.8rem' }}>Timeline:</span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(defaultWindow.from);
+                  setToDate(defaultWindow.to);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineAll ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineAll ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineAll ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineAll ? 'bold' : 'normal',
+                }}
+              >
+                All
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(true);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineUpcoming ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineUpcoming ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineUpcoming ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineUpcoming ? 'bold' : 'normal',
+                }}
+              >
+                Upcoming
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(defaultWindow.from);
+                  setToDate(todayUtc);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: isTimelineHistorical ? '1px solid #58a6ff' : '1px solid #30363d',
+                  background: isTimelineHistorical ? 'rgba(88, 166, 255, 0.12)' : '#0b0e14',
+                  color: isTimelineHistorical ? '#58a6ff' : '#c9d1d9',
+                  cursor: 'pointer',
+                  fontWeight: isTimelineHistorical ? 'bold' : 'normal',
+                }}
+              >
+                Historical
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ color: '#8b949e', fontSize: '0.8rem' }}>Presets:</span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(utcDateOnly(addDaysUtc(new Date(), -30)));
+                  setToDate(todayUtc);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Last 30d
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate(todayUtc);
+                  setToDate(utcDateOnly(addDaysUtc(new Date(), 7)));
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                Next 7d
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const y = new Date().getUTCFullYear();
+                  setFromDate(`${y}-01-01`);
+                  setToDate(`${y}-12-31`);
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                This year
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setUpcomingOnly(false);
+                }}
+                style={{
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 999,
+                  border: '1px solid #30363d',
+                  background: '#0b0e14',
+                  color: '#c9d1d9',
+                  cursor: 'pointer',
+                }}
+              >
+                All time
+              </button>
+            </div>
 
             <button
               type="button"
@@ -785,7 +1059,7 @@ export default function App() {
                 fontWeight: 'bold',
               }}
             >
-              Apply
+              Apply{draftFilterCount ? ` (${draftFilterCount})` : ''}
             </button>
 
             <button
@@ -852,9 +1126,9 @@ export default function App() {
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: '1.5rem',
-          position: 'sticky',
-          top: '5.75rem',
-          zIndex: 10,
+          // Non-sticky for a seamless, unified scroll experience (no overlap/bleed).
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #30363d', color: '#8b949e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
@@ -925,7 +1199,7 @@ export default function App() {
             </div>
           )}
 
-          <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={mapCenter} zoom={mapPoints.length ? 4 : 2} style={{ height: '100%', width: '100%', background: '#161b22' }}>
             <MapFitBounds points={mapPoints} enabled={!loading && !selectedLaunchId} resetNonce={mapResetNonce} />
             <MapFitSelectedEndpoints launchPoint={selectedLaunchPoint} recoveryPoint={recoveryPoint} />
             <MapSelectionFlyTo selectedPoint={selectedPoint} enabled={!recoveryPoint} />
@@ -936,8 +1210,10 @@ export default function App() {
               landingMarkerRef={landingMarkerRef}
             />
             <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+              url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              subdomains='abcd'
+              maxZoom={20}
             />
 
             {/* Overlays */}
@@ -1013,118 +1289,12 @@ export default function App() {
                 }}
               >
                 <Tooltip sticky opacity={0.95}>
-                  {selectedLaunch.recovery_method || (selectedRecoveryOverlay?.overlay_type === 'asds' ? 'ASDS' : 'RTLS')}
+                  {prettyRecoveryMethod(selectedLaunch.recovery_method) || (selectedRecoveryOverlay?.overlay_type === 'asds' ? 'Drone ship (ASDS)' : 'Return to launch site (RTLS)')}
                 </Tooltip>
               </Polyline>
             )}
 
-            {mapPointGroups.map((g) => {
-              const count = g.points.length;
-
-              if (count === 1) {
-                const p = g.points[0];
-                return (
-                  <CircleMarker
-                    key={p.id}
-                    center={[p.lat, p.lon]}
-                    radius={7}
-                    pathOptions={{
-                      color: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      weight: p.id === selectedLaunchId ? 3 : selectedLaunchId ? 1 : 2,
-                      fillColor: p.id === selectedLaunchId ? '#58a6ff' : '#2f81f7',
-                      fillOpacity: selectedLaunchId && p.id !== selectedLaunchId ? 0.06 : 0.60,
-                    }}
-                    eventHandlers={{
-                      click: () => setSelectedLaunchId(p.id),
-                    }}
-                    ref={(ref) => {
-                      if (ref) launchMarkerRefs.current.set(p.id, ref);
-                    }}
-                  >
-                    <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
-                      Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
-                    </Tooltip>
-                    <Popup offset={launchPopupOffset} maxWidth={300} minWidth={200}>
-                      <div style={{ maxWidth: 280 }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: 6 }}>{p.mission_name || 'Unknown mission'}</div>
-                        <div style={{ marginBottom: 6 }}>
-                          <span
-                            style={{
-                              backgroundColor: statusColor(p.status),
-                              color: '#fff',
-                              padding: '0.15rem 0.5rem',
-                              borderRadius: 4,
-                              fontSize: '0.75rem',
-                              fontWeight: 'bold',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {p.status || 'Unknown'}
-                          </span>
-                        </div>
-                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>
-                          Launch Pad: {p.pad_name || p.location_name || 'Unknown'}
-                        </div>
-                        <div style={{ color: '#8b949e', fontSize: '0.85rem' }}>{p.location_name || ''}</div>
-                        <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                          {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'}
-                        </div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                );
-              }
-
-              // Cluster marker for overlapping launches.
-              return (
-                <CircleMarker
-                  key={g.key}
-                  center={[g.lat, g.lon]}
-                  radius={12}
-                  pathOptions={{
-                    color: '#2f81f7',
-                    weight: 2,
-                    fillColor: '#2f81f7',
-                    fillOpacity: 0.75,
-                  }}
-                >
-                  <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
-                    {count} launches at this pad
-                  </Tooltip>
-                  <Popup maxWidth={340} minWidth={220}>
-                    <div style={{ maxWidth: 320 }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Launches at this pad ({count})</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {g.points
-                          .slice()
-                          .sort((a, b) => String(a.launch_time || '').localeCompare(String(b.launch_time || '')))
-                          .map((p) => (
-                            <button
-                              key={`pick-${p.id}`}
-                              type="button"
-                              onClick={() => setSelectedLaunchId(p.id)}
-                              style={{
-                                textAlign: 'left',
-                                padding: '0.35rem 0.5rem',
-                                borderRadius: 6,
-                                border: '1px solid #30363d',
-                                background: '#0b0e14',
-                                color: '#c9d1d9',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <div style={{ fontWeight: 'bold', color: '#58a6ff' }}>{p.mission_name || 'Unknown mission'}</div>
-                              <div style={{ fontSize: '0.85rem', color: '#8b949e' }}>
-                                {p.launch_time ? new Date(p.launch_time).toLocaleString() : 'TBD'} · {p.status || 'Unknown'}
-                              </div>
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              );
-            })}
+            <MarkerClusterLayer points={mapPoints} onMarkerClick={setSelectedLaunchId} selectedId={selectedLaunchId} launchMarkerRefs={launchMarkerRefs} />
           </MapContainer>
         </div>
       </section>
@@ -1282,6 +1452,40 @@ export default function App() {
                 );
               })()}
 
+              {/* Tools */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 6 }}>Tools</div>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const id = selectedLaunch?.id;
+                        if (!id) return;
+                        await navigator.clipboard.writeText(String(id));
+                        setCopiedMissionId(true);
+                        window.setTimeout(() => setCopiedMissionId(false), 1200);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    style={{
+                      padding: '0.55rem 0.8rem',
+                      borderRadius: 8,
+                      border: '1px solid #30363d',
+                      background: '#161b22',
+                      color: '#c9d1d9',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    Copy Mission ID
+                  </button>
+
+                  {copiedMissionId && <span style={{ color: '#7ee787', fontSize: '0.85rem' }}>Copied</span>}
+                </div>
+              </div>
+
               {/* Recovery details */}
               <div style={{ marginBottom: '1.0rem' }}>
                 <div style={{ fontSize: '0.8rem', color: '#8b949e', marginBottom: 8 }}>Recovery</div>
@@ -1305,8 +1509,8 @@ export default function App() {
                     )}
 
                     <div>
-                      <span style={{ color: '#8b949e' }}>Method: </span>
-                      <span style={{ color: '#c9d1d9' }}>{selectedLaunch?.recovery_method || '—'}</span>
+                      <span style={{ color: '#8b949e' }}>Landing: </span>
+                      <span style={{ color: '#c9d1d9' }}>{prettyRecoveryMethod(selectedLaunch?.recovery_method) || '—'}</span>
                     </div>
 
                     <div>
@@ -1345,6 +1549,7 @@ export default function App() {
               }
             }}
             tabIndex={0}
+            className="launch-card"
             style={{
               backgroundColor: '#161b22',
               borderRadius: 8,
@@ -1355,7 +1560,6 @@ export default function App() {
               justifyContent: 'space-between',
               boxShadow: l.id === selectedLaunchId ? '0 0 15px rgba(88, 166, 255, 0.4)' : '0 4px 6px rgba(0,0,0,0.3)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
               transform: l.id === selectedLaunchId ? 'translateY(-2px)' : 'none',
             }}
           >
@@ -1378,9 +1582,14 @@ export default function App() {
                 <Countdown targetDate={l.launch_time} />
               </div>
 
-              <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.5rem', color: '#58a6ff' }}>
+              <h2 style={{ fontSize: '1.15rem', margin: '0.85rem 0 0.25rem', color: '#58a6ff' }}>
                 {l.mission_name || 'Unknown Mission'}
               </h2>
+              {l.rocket_name && (
+                <div style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: '0.5rem', fontStyle: 'italic' }}>
+                  {l.rocket_name}
+                </div>
+              )}
 
               <div style={{ marginBottom: 6 }}>
                 <span style={{ color: '#8b949e', fontSize: '0.9rem' }}>Pad: </span>
@@ -1402,7 +1611,7 @@ export default function App() {
                   )}
                   {(l.recovery_method || l.recovery_provider) && (
                     <div style={{ marginTop: 4, color: '#8b949e', fontSize: '0.85rem' }}>
-                      {l.recovery_method ? `Method: ${l.recovery_method}` : ''}
+                      {l.recovery_method ? `Landing: ${prettyRecoveryMethod(l.recovery_method)}` : ''}
                       {l.recovery_method && l.recovery_provider ? ' · ' : ''}
                       {l.recovery_provider ? `Source: ${l.recovery_provider}` : ''}
                     </div>
@@ -1412,7 +1621,10 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #30363d', fontSize: '0.85rem', color: '#8b949e' }}>
-              {l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}
+              <div>{l.launch_time ? new Date(l.launch_time).toLocaleString() : 'Time TBD'}</div>
+              {formatTimeAgo(l.last_updated) && (
+                <div style={{ marginTop: 4, fontSize: '0.8rem', color: '#6e7681' }}>{formatTimeAgo(l.last_updated)}</div>
+              )}
             </div>
           </div>
         ))}
@@ -1510,10 +1722,34 @@ export default function App() {
 
         {loading && launches.length === 0 && (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#8b949e' }}>
-            Loading…
+            <div className="loading-pulse" style={{ fontSize: '1.1rem', color: '#58a6ff', marginBottom: '0.5rem' }}>● Loading missions…</div>
+            <div style={{ fontSize: '0.85rem' }}>Fetching data from the API</div>
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer style={{
+        marginTop: '3rem',
+        paddingTop: '1.5rem',
+        borderTop: '1px solid #2d333b',
+        textAlign: 'center',
+        color: '#484f58',
+        fontSize: '0.8rem',
+      }}>
+        <div>Earth to Orbit Monitoring Dashboard</div>
+        <div style={{ marginTop: '0.35rem' }}>
+          Data sourced from{' '}
+          <a href="https://thespacedevs.com/" target="_blank" rel="noreferrer" style={{ color: '#58a6ff', textDecoration: 'none' }}>
+            The Space Devs
+          </a>
+          {' · '}
+          Map tiles by{' '}
+          <a href="https://carto.com/" target="_blank" rel="noreferrer" style={{ color: '#58a6ff', textDecoration: 'none' }}>
+            CARTO
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
